@@ -1,0 +1,191 @@
+.\"
+.TH "cfg-update" "17" "May 2007" "S. van Boven" ""
+.SH "NAME"
+\fBcfg\-update\fR \- An easy to use CLI/GUI alternative for etc\-update with safe automatic update functionality.
+
+.SH "SYNOPSIS"
+cfg\-update
+.RI [ flags ]
+.RI [ runmode ]
+
+.SH "DESCRIPTION"
+.LP
+The cfg\-update script is designed to be a safe and simple tool for updating configuration files in Gentoo Linux. The updating process consists of 5 stages:
+.TP
+  \fBStage1\fR: Automatic updating of unmodified files and binaries
+.TP
+  \fBStage2\fR: Automatic 3\-way merging of modified files (uses backup as ancestor file)
+.TP
+  \fBStage3\fR: Manual 3\-way merging of modified files (with merge conflicts in stage 2)
+.TP
+  \fBStage4\fR: Manual 2\-way merging of modified files (that don't have backups yet)
+.TP
+  \fBStage5\fR: Manual updating of modified binaries and links
+.LP
+You can disable each stage in /etc/cfg\-update.conf to suit your needs. So if you don't trust automatic 3\-way merging, just disable stage2 and cfg\-update will let you take care of these files manually in stage3. If the selected diff/merge tool doesn't support 3\-way merging, cfg\-update automatically disables stage3 and continues with stage4 for manual 2\-way merging.
+.LP
+cfg\-update also supports automatic\-only updating for use with cronjobs or other automated system maintenance scripts. Just use the \fB\-a\fR option and cfg\-update will skip stages 3,4 and 5.
+
+.SH "RUNMODES"
+.B
+.IP \-l,\ \-\-list
+List configuration files that need to be updated.
+.B
+.IP \-u,\ \-\-update
+Update files in sequence or add a number from the \fB\-l\fP output to update only that specific file.
+.B
+.IP \-b,\ \-\-backups
+List backup files from previous updates. These backups are stored in /var/lib/cfg-update/backups but you can change the location with the BACKUP_PATH variable in /etc/cfg-update.conf
+.B
+.IP \-r,\ \-\-restore\ [x]
+Add a number from the \fB\-b\fP output to restore a specific file.
+.B
+.IP \-\-mount
+Mounts the remote hosts specified in /etc/cfg-update.hosts
+.B
+.IP \-\-check
+Checks the remote hosts for problems and shows their status.
+.B
+.IP \-\-unmount
+Unmounts the remote hosts specified in /etc/cfg-update.hosts
+
+.SH "OPTIONS"
+.B
+.IP \-v,\ \-\-verbose
+Verbose output, makes various file operations visible and unhides STDERR messages. Use this if you experience problems with starting the GUI tool, it may give you useful clues in the STDERR messages.
+.B
+.IP \-a,\ \-\-automatic\-only
+Force cfg\-update to only use the automatic stages (1,2) for updating. (only useful in combination with the \fB\-u\fP option)
+.B
+.IP \-m,\ \-\-manual\-only
+Force cfg\-update to only use the manual stages (3,4,5) for updating. (only useful in combination with the \fB\-u\fP option)
+.B
+.IP \-h,\ \-\-host [x or x-y]
+Include sshfs mounted remote hosts (combine with \-l, \-u, \-b, \-r).
+Add the number of a specific host or a range for multiple hosts.
+For more information see: /etc/cfg-update.hosts
+.B
+.IP \-p,\ \-\-pretend
+This option allows you to see what actions cfg\-update will take on the configuration files.
+.B
+.IP \-t,\ \-\-tool
+Changes the default diff/merge tool for the duration of the session. (you can also permanently change the tool in /etc/cfg\-update.conf)
+.B
+.IP \-d,\ \-\-debug
+With this option cfg\-update will output tags when starting or finishing subroutines in the script. cfg\-update will not suppress STDERR messages, it will show all calls to other programs and it prints subroutine tags for easy troubleshooting.
+
+.SH "SPECIAL OPTIONS"
+.B
+.IP \-i,\ \-\-index
+Check the index and rebuild if new packages have been installed (--index is used in the hooks for Portage and Paludis).
+The hook for Paludis will add an extra option --paludis behind --index.
+.B
+.IP \-s,\ \-\-show\-protected\-dirs
+List all protected directories on your system.
+.B
+.IP \-\-optimize\-backups
+Creates extra backups which can be used for future automatic 3-way merging, so you don't have to update them manually.
+
+
+.SH "USAGE EXAMPLES"
+.B
+.IP cfg\-update\ \-l
+Lists all updates.
+.B
+.IP cfg\-update\ \-v\ \-l
+Lists all updates and shows which stage will handle the update.
+.B
+.IP cfg\-update\ \-p\ \-u
+Pretends updating the configuration files.
+.B
+.IP cfg\-update\ \-u
+Starts the update session using the default tool.
+.B
+.IP cfg\-update\ \-v\ \-u
+Starts the update session and makes file operations visible.
+.B
+.IP cfg\-update\ \-u\ \-t\ /usr/bin/meld
+Starts the update session using the specified tool instead of the default MERGE_TOOL from /etc/cfg-update.conf
+.B
+.IP cfg\-update\ \-au
+Starts the update session in automatic\-only mode. When this option is selected, cfg\-update will only process stage1 and stage2. This mode can be used for cronjobs and other automated system maintenance scripts.
+.B
+.IP cfg\-update\ \-mu
+Starts the update session in manual\-only mode. When this option is selected, cfg\-update will only process stage3, stage4 and stage5.
+.B
+.IP cfg\-update\ \-b
+Lists all backups. You can take a number and use that with \fB\-r\fR to restore that particular file.
+.B
+.IP cfg\-update\ \-r77
+This will restore the 77th backup listed in the \fB\-b\fR output. cfg\-update will restore both the previous configuration file and the previous ._cfg0000_file so that you'll be able to retry the update.
+
+.SH "USAGE EXAMPLES FOR UPDATING MULTIPLE MACHINES"
+.B
+.IP cfg\-update\ \-h0\ \-l
+Lists all updates for localhost.
+.B
+.IP cfg\-update\ \-h1\ \-l
+Lists all updates for remote host 1.
+.B
+.IP cfg\-update\ \-h0\-100\ \-l
+Lists all updates for localhost and remote hosts 1 to 100.
+.B
+.IP cfg\-update\ \-h1\-100\ \-l
+Lists all updates for remote hosts 1 to 100.
+.B
+.IP cfg\-update\ \-h1-100\ \-u
+Starts the update session for remote hosts 1 to 10.
+.B
+.IP cfg\-update\ \-h1\ \-b
+Lists all backups for remote host 1. You can take a number and use that with \fB\-r\fR to restore that particular file.
+.B
+.IP cfg\-update\ \-h1\ \-r77
+This will restore the 77th backup on remote host 1, listed in the \fB\-b\fR output. cfg\-update will restore both the previous configuration file and the previous ._cfg0000_file so that you'll be able to retry the update.
+
+.SH "STAGE1"
+.LP
+In Stage1 cfg\-update will look at the md5\-checksum of the current configuration files. Portage stores these checksums when it installs files. If a checksum hasn't changed it means that the file hasn't been modified and does not contain customized settings. These files will be replaced with the new version automatically.
+
+.SH "STAGE2"
+.LP
+Stage2 uses a second automatic updating method. This stage tries to automatically update modified files. It looks for backups of previous updates and uses the previous update for a 3\-way diff with the current file and the new update. The files are sent through the diff3 tool and the merged output is saved. If the merged output contains a merge\-conflict it will cancel the automatic update and if there are no merge\-conflicts it will complete the update.
+
+.SH "STAGE3"
+.LP
+Stage3 handles modified files with merge\-conflicts. These files will be presented to you in the graphical diff/merge tool of your choice so you can solve the merge\-conflicts by clicking on the lines that you want to include in the new file. If your tool doesn't support 3\-way merging, cfg\-update will skip this stage.
+
+.SH "STAGE4"
+.LP
+Stage4 allows you to update files that have not been updated before with cfg\-update. It does the same as stage3 but now with only two files. You simply click on the lines that you want to include in the new file.
+
+.SH "STAGE5"
+.LP
+Stage5 let's you handle modified binaries, and updates that include symlinks. cfg\-update will give you some advice and ask you what to do with the files.
+
+.SH "MORE INFO"
+.LP
+By default cfg\-update makes backups of the current configuration file and the new ._cfg0000_ file so you can always restore both and try updating again. These backups are stored in /var/lib/cfg-update/backups.
+.LP
+The modification checking method for stage1 comes from Naan Yaar's post on the Gentoo Forums. Portage stores information about each installed package (in /var/db/pkg). The file called CONTENTS has a list containing MD5\-checksums of all the files installed by that particular package. You can simply compare the checksum of the current configuration file with the checksum in the CONTENTS file to determine whether the file has been modified or not.
+.LP
+But... when you install a new package, and an update for one of the configuration files is placed in a protected directory, it's too late to get the checksum for the current configuration file because the CONTENTS file is already updated by Portage and contains the checksum of the update!
+.LP
+The solution is very simple; a backup is created of all the checksums that Portage has stored in the CONTENTS files. I chose to write all checksums found in /var/db/pkg/*/* to a single file and add the timestamp of the last installed package as an indicator that new packages have been installed. (/usr/lib/cfg\-update/checksum.index) Creating this list only takes a couple of seconds even on an old Pentium. In earlier versions of cfg\-update the index was updated by using an alias for emerge. Newer versions use the /etc/portage/bashrc file with a hook for the ebuild setup phase.
+.LP
+This enables cfg\-update to update it's checksum index before one or more new packages are installed.  But updating the index can only be done when there are no updates in the protected directories. So once an update is found cfg\-update will not update the index until you have updated all your files.
+
+.SH "SEE ALSO"
+/etc/cfg-update.conf
+/etc/cfg-update.hosts
+http://people.zeelandnet.nl/xentric/
+
+.SH "LICENSE"
+This program is free software. You can redistribute it and/or modify it under the terms of the GNU General Public License v2 as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but without ANY warranty, without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License v2 for more details.
+
+You should have received a copy of the GNU General Public License v2 along with this program. If not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111\-1307 USA
+
+.SH "REPORTING BUGS"
+Please report bugs via http://bugs.gentoo.org
+
+.SH "AUTHOR"
+S. van Boven  <sboven@zeelandnet.nl>

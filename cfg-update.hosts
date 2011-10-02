@@ -1,0 +1,206 @@
+###############################################################################
+#           HOWTO - UPDATE MULTIPLE SYSTEMS FROM A SINGLE LOCATION            #
+###############################################################################
+#
+# Remote updating becomes trivial when using SSHFS. (sys-fs/sshfs-fuse)
+# SSHFS allows you to connect a complete system to a local mountpoint.
+# cfg-update takes the mountpoints for remote hosts from this file (see below)
+# and treats them as if the files are on the localhost itself. So you can use
+# your favorite GUI mergetool on the localhost for updating remote systems.
+# The remote system doesn't even need to have an X-server installed.
+#
+# cfg-update needs to be installed on each remote host because each host needs
+# to keep it's own checksum-index up-to-date. The cfg-update on the localhost
+# will use the remote checksum-index when updating files on the remote host(s)
+# but it will not create or update the remote index!
+#
+# An extra advantage of this approach is that you can still use cfg-update like
+# normal on each host. So you can use a single machine for updating all hosts,
+# but also update the machines with their locally installed cfg-update.
+#
+###############################################################################
+#                        BIG FAT SECURITY WARNING                             #
+###############################################################################
+#
+# The easy to use sshfs_with_passwordless_authentication method, which is fully
+# described below, has a MAJOR security implication: If someone hacks into the
+# controlling host, gains root and steals the private-key, he/she immediately
+# has full root access to all the remote machines!
+# You have been warned...
+#
+# If you decide to skip the key generating and distributing part of this HOWTO,
+# "cfg-update --mount" will prompt you for passwords when it mounts the remote
+# hosts to the local mountpoints.
+#
+###############################################################################
+#                              IMPORTANT NOTES                                #
+###############################################################################
+#
+# All hosts should have the same BACKUP_PATH and INDEXFILE settings so check
+# /etc/cfg-update.conf on each host!
+# And the localhost CONFIG_PROTECT variable (protected directories) dictates
+# which directories will be searched for updates on all hosts. So if the
+# localhost only has /etc in CONFIG_PROTECT and the remote host has /etc + /root
+# in it's CONFIG_PROTECT variable, you need to add /root to the CONFIG_PROTECT
+# variable of the localhost!
+#
+###############################################################################
+#                 INSTALL CFG-UPDATE ON EACH REMOTE MACHINE                   #
+###############################################################################
+#
+# Optionally set -kde -gnome useflags for non-X systems:
+# root@remotehost / # echo app-portage/cfg-update -kde -gnome >> /etc/portage/package.use
+#
+# Install cfg-update:
+# root@remotehost / # emerge -av cfg-update
+#
+# Edit /etc/cfg-update.conf and check the following variables:
+#   BACKUP_PATH (check if location is the same as on the controlling host)
+#   INDEXFILE   (check if location is the same as on the controlling host)
+#   MERGETOOL   (set to "sdiff" or "vimdiff" for non-X systems)
+#
+# Install the alias/hook for your package manager (keeps checksum-index up-to-date):
+# root@remotehost / # cfg-update --enable-portage-hook
+#
+# Update the checksum-index (only works when there are no ._cfg0000_ files):
+# root@remotehost / # cfg-update --index
+#
+###############################################################################
+#                  SET UP OPENSSH ON EACH REMOTE MACHINE                      #
+###############################################################################
+#
+# Install openssh:
+# root@remotehost / # emerge net-misc/openssh
+#
+# Edit /etc/ssh/sshd_config and make sure the following two items are set to yes:
+#   PermitRootLogin yes
+#   PubkeyAuthentication yes
+#
+# Add the sshd daemon to the boot runlevel:
+# root@remotehost / # rc-update add sshd boot
+#
+# Then start (or restart) the sshd daemon:
+# root@remotehost / # /etc/init.d/sshd start (or restart)
+#
+###############################################################################
+#               GENERATE A PUBLIC/PRIVATE KEYPAIR ON THE LOCALHOST            #
+###############################################################################
+#
+# (Skip this section if you do not want passwordless authentication)
+#
+# root@localhost / # emerge sys-fs/sshfs-fuse
+# root@localhost / # cd $HOME
+# root@localhost ~ # ssh-keygen -t rsa
+#    Generating public/private rsa key pair.
+#    Enter file in which to save the key (/root/.ssh/id_rsa): [enter]
+#    Enter passphrase (empty for no passphrase): [enter]
+#    Enter same passphrase again: [enter]
+#    Your identification has been saved in /root/.ssh/id_rsa.
+#    Your public key has been saved in /root/.ssh/id_rsa.pub.
+#    The key fingerprint is:
+#    0a:53:a2:be:d7:c3:23:5c:06:78:25:77:b4:59:30:a1 root@localhost
+#
+###############################################################################
+#    DISTRIBUTE PUBLIC-KEY TO THE REMOTE HOST (REPEAT FOR EACH REMOTE HOST)   #
+###############################################################################
+#
+# (Skip this section if you do not want passwordless authentication)
+# (Example is based on static IP-addresses, you might want to use hostnames)
+#
+# root@localhost ~ # mkdir /mnt/remote-100
+# root@localhost ~ # sshfs -o workaround=rename -o cache_timeout=20 -o ServerAliveInterval=15 root@192.168.2.100:/ /mnt/remote-100
+#    Password: [enter root password for remote host]
+# root@localhost ~ # mkdir /mnt/remote-100/root/.ssh
+# root@localhost ~ # chmod 700 /mnt/remote-100/root/.ssh
+# root@localhost ~ # cat .ssh/id_rsa.pub >> /mnt/remote-100/root/.ssh/authorized_keys
+# root@localhost ~ # chmod 600 /mnt/remote-100/root/.ssh/authorized_keys
+# root@localhost ~ # fusermount -u /mnt/remote-100
+#    Now test the passwordless authentication:
+# root@localhost ~ # ssh root@192.168.2.100 uptime
+#
+###############################################################################
+#     ADD 3 LINES PER REMOTE MACHINE TO THE BOTTOM OF THIS FILE (EXAMPLE)     #
+###############################################################################
+#
+# MOUNT_POINT = /mnt/remote-100
+# MOUNT_CMD   = sshfs -o transform_symlinks -o workaround=rename -o cache_timeout=20 -o ServerAliveInterval=15 root@192.168.2.100:/ /mnt/remote-100
+# UNMOUNT_CMD = fusermount -u /mnt/remote-100
+#
+# "-o transform_symlinks" is needed otherwise remote links would point to local targets.
+# "-o workaround=rename" is needed to fix issues with the mv command.
+# "-o cache_timeout=20" controls the default sshfs cache timeout (in seconds).
+# "-o ServerAliveInterval=15" will keep the connection alive.
+# Automatic mounting, if desired, can be added to a shell script such as
+# /root/.bashrc (provided authentication is done using RSA/DSA keys).
+# This can also be done in /etc/fstab. Just read some sshfs/fuse documentation:
+# http://fuse.sourceforge.net/sshfs.html  (see FAQ)
+#
+# If you take care of mounting the remote systems in a different manner, you
+# can ignore the --mount and --unmount commands. The script expects 3 lines for
+# each remote system. So if you take care of mounting in a different way,
+# leave MOUNT_CMD and UNMOUNT_CMD empty like this:
+#
+# MOUNT_POINT = /mnt/remote-100
+# MOUNT_CMD   =
+# UNMOUNT_CMD =
+#
+###############################################################################
+#                               USAGE EXAMPLE                                 #
+###############################################################################
+#
+# "cfg-update --mount"     mounts all specified remote systems
+# "cfg-update --check"     checks if remote systems are properly set up
+# "cfg-update -l"          lists updates for localhost only
+# "cfg-update -lh"         lists updates for all hosts
+# "cfg-update -lh 1"       lists updates for host 1
+# "cfg-update -lh 1-15"    lists updates for hosts 1-15
+# "cfg-update -u"          starts the update session for localhost only
+# "cfg-update -uh"         starts the update session for all hosts
+# "cfg-update -uh 1"       starts the update session for host 1
+# "cfg-update -uh 1-15"    starts the update session for hosts 1 to 15
+# "cfg-update --unmount"   unmounts all specified remote systems
+#
+###############################################################################
+#       END OF HOWTO - ADD 3 LINES FOR EACH REMOTE HOST BELOW THIS LINE       #
+###############################################################################
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+
+#MOUNT_POINT =
+#MOUNT_CMD   =
+#UNMOUNT_CMD =
+

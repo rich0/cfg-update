@@ -1,0 +1,12 @@
+#!/bin/bash
+source ${PALUDIS_EBUILD_DIR}/echo_functions.bash
+
+einfo "cfg-update:"
+
+if [ -e "/usr/bin/cfg-update" ]; then
+    cfg-update --index --paludis
+else
+    ewarn "cfg-update not found, please remove $0"
+fi
+
+

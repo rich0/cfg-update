@@ -1,0 +1,14 @@
+#!/bin/bash
+if [ -e "/usr/bin/php" ]; then
+    if [ -e "/usr/bin/cfg-update_phphelper" ]; then
+        cfg-update_phphelper $*      # this script will skip "cfg-update --index" if arguments are blacklisted (-p,-s,-S,etc.)
+    else
+        if [ -e "/usr/bin/cfg-update" ]; then
+            cfg-update --index       # if the phphelper doesn't exist, run cfg-update without checking the arguments
+        else
+            echo "*** cfg-update not found, disable the alias for emerge in /root/.bashrc !"
+        fi
+
+    fi
+fi
+emerge $*                            # run emerge whatever the case may be...

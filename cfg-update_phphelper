@@ -1,0 +1,110 @@
+#!/usr/bin/php -q
+<?
+/*
+    Written 2005-09-18 (by GD)
+    Updated 2005-09-21 15:45 GMT+1 (by GD)
+        This script is used to replace the existing cfg-update solution
+        wrapper solution with the purpouse of avoiding unnecessary
+        waits/delays during emerge operations
+    Updated 2005-12-31 03:08 GMT+2 (by S. van Boven)
+        Removed "columns" from bl_fword array because this flag is used
+        only in combination with --pretend, which is blocked already.
+        Tested if this script could start the emerge command, but it
+        turns out that it strips color from the emerge output when it
+        is started with passthru(). So I made the wrapperscript start
+        the emerge when this script is done...
+        Slightly modified the output in case a blacklisted flag is found.
+*/
+
+/* Blacklisted flags (no packages can be merged with these flags present)
+	--help (-h short option)
+	--info
+	--metadata
+	--sync
+	--search (-s short option)
+	--changelog (-l short option)
+	--fetchonly (-f short option)
+	--fetch-all-uri
+	--pretend (-p short option)
+	--searchdesc (-S short option)
+	--version (-V short option)
+*/
+/* Previous flags loaded into two arrays, one for short form other for full form. */
+$bl_fword = array("help","info","metadata","sync","search","changelog","fetchonly","pretend","searchdesc","version");
+$bl_sword = array("h","s","l","f","p","S","V");
+
+/* &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& BEGINNING of required functions*/
+/* check if a binary is in the users path with
+   "which" this allows for non standard / non
+   default directory structures */
+function is_in_path($bin) {
+        $path = trim(`which {$bin}`);
+        if ((stristr($path,"no {$bin}")) || (!is_file($path))) { return false; }
+        else { return $path; }
+}
+
+/* strstr modified to work with array needles
+   and which returns the needle that was found
+   or false if nothing was found. */
+function better_strstr_rv($haystack,$needles) {
+        if (is_array($needles)) {
+                foreach($needles as $key=>$val) { if (strstr($haystack,$val)) { return $val; } }
+                return false;
+        }
+        return strstr($haystack,$needles);
+}
+/* personalize the cfg-update output when
+   running an emerge so it is recognizable
+   for what it is. */
+function output_msg($msg) {
+	echo ">>> \033[1mcfg-update:\033[0m {$msg}\n";
+}
+/* &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& END of required functions */
+
+/* &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& BEGINNING of actual processing */
+// Go through all args looking for flags
+foreach ($argv as $flag) {
+	// Flags only begin with - or --
+	if (preg_match("/^(-{1,2})([a-z]+)/i",$flag,$match)) {
+		// Make sure no stagnant values can throw us off
+		if (isset($fkey)) { unset($fkey); }
+		// If the flag is a full word flag proceeded by --
+		if (strlen($match[1]) > 1) {
+			// Check if it is a blacklisted flag, in which case break the loop
+			if ($fkey = better_strstr_rv($match[0],$bl_fword)) {
+				$noindex = $match[0];
+				break;
+			}
+			// Otherwise check the next one
+			else { continue; }
+		}
+		// Must only have one -, check if it is a blacklisted flag, in which case break the loop
+		elseif ($fkey = better_strstr_rv($match[0],$bl_sword)) {
+			$noindex = $match[0];
+			break;
+		}
+		// Otherwise check the next one
+		else { continue; }
+	}
+}
+// Check if the loop was broken and no index should be generated
+if (isset($noindex)) {
+//    output_msg("Skipping index update because of \"{$fkey}\" being found in \"{$noindex}\"...");
+    $command = "emerge ".join(array_slice($argv,1)," ");
+    output_msg("found \"-{$fkey}\", skipping index update...");
+}
+// Otherwise it is fine to generate a new index
+elseif (is_in_path("cfg-update")) {
+//	output_msg("No blacklisted flags found, updating index now.");
+	passthru("cfg-update --index");
+}
+// Otherwise should have run cfg-update but couldn't find it.
+else {
+	output_msg("No blacklisted flags found, however cfg-update doesn't appear to be in your path and thus could not be executed to generate the index.");
+	output_msg("If you have uninstalled cfg-update or wish to no longer see this message, please remove the emerge alias in /root/.bashrc !");
+}
+// The following is disabled because the script that calls this script will start emerge (no color output for php system() call!)
+// $command = "emerge ".join(array_slice($argv,1)," ");
+// passthru($command);
+/* &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& END of actual processing and script */
+?>

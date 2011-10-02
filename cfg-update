@@ -1,0 +1,2616 @@
+#!/usr/bin/perl -w
+use strict;
+use File::Basename;
+use Getopt::Long qw(:config bundling permute pass_through);
+use Term::ANSIColor qw(:constants);
+$Term::ANSIColor::AUTORESET = 1;
+
+#
+# Program: /usr/bin/cfg-update
+# Author: Stephan van Boven (xentric on Gentoo Forums)
+#
+# This program is free software. You can redistribute it and/or modify it
+# under the terms of the GNU General Public License v2 as published by the
+# Free Software Foundation. This program is distributed in the hope that it
+# will be useful, but without ANY warranty, without even the implied warranty
+# of merchantability or fitness for a particular purpose. See the GNU General
+# Public License v2 for more details.
+#
+
+######################################################################################################################
+#                                          TODO_LIST                                                                 #
+######################################################################################################################
+
+# ADD subroutine that detects similar updates on remote hosts, then offer to clone the update on these remote hosts
+
+######################################################################################################################
+#                                          GLOBAL VARIABLES AND SETTINGS                                             #
+######################################################################################################################
+
+# Setting program variables...
+    my $version           = "1.8.2-r1";
+    my $progname          = basename($0);
+    my $debug             = "2>/dev/null";
+    my $website           = "http://people.zeelandnet.nl/xentric";
+# Set default settings...
+    my $pkg_manager       = "Portage";
+    my $install_log       = "/var/log/emerge.log";
+    my $find_string       = "::: completed emerge";
+    my $pkg_db            = "/var/db/pkg";
+    my $portage_hook      = "/etc/portage/bashrc";
+    my $paludis_hook      = "/usr/share/paludis/hooks/install_all_pre/cfg-update.bash";
+    my $merge_tool        = "/usr/bin/xxdiff";
+    my $merge_tool_name   = "xxdiff";
+    my $view_tool         = "less";
+    my $xxdiff_style      = "--style Keramik";
+    my $backup_path       = "/var/lib/cfg-update/backups";
+    my $index_file        = "/var/lib/cfg-update/checksum.index";
+    my $alias_file        = "/root/.bashrc";
+    my $settings          = "/etc/cfg-update.conf";
+    my $log_file          = "/var/lib/cfg-update/cfg-update.log";
+    my $hosts_file        = "/etc/cfg-update.hosts";
+    my $enable_backups    = "yes";
+    my $enable_stage1     = "yes";
+    my $enable_stage2     = "yes";
+    my $enable_stage3     = "yes";
+    my $enable_stage4     = "yes";
+    my $enable_stage5     = "yes";
+    my $config_new        = "._cfg????_*";          # search string used to identify the new config files
+    my $rm_new            = "\\._cfg...._";         # regular expression to strip $config_new from filename (needs double escapes!)
+    my $temp_new          = "._temp-new-cfg_*";     # filename format for temporary storage of new ancestor file
+    my $backup_new        = "._new-cfg_*";          # filename format for backup new config file
+    my $restore_new       = "._cfg0000_*";          # filename format for restoring the new config file
+    my $rm_old            = "\\._old-cfg_";         # regular expression to strip $backup_old from filename (needs double escapes!)
+    my $temp_old          = "._temp-old-cfg_*";     # filename format for temporary storage of new previous config file
+    my $backup_old        = "._old-cfg_*";          # filename format for backup original config file
+    my $restore_old       = "*";                    # filename format for restoring the old config file
+    my $merged            = "*.merge";              # filename format for the merged result
+    my $rootdir           = "/root";
+# Override default settings with values from configuration file...
+    open(FILE, $settings) || die "Can't open file: $settings!\n";
+    while (my $line = <FILE>) {
+        chomp $line;
+        if ($line =~ /^\s*MERGETOOL\s*=\s*/i)         { $merge_tool        = &strip($'); }
+        if ($line =~ /^\s*MERGE_TOOL\s*=\s*/i)        { $merge_tool        = &strip($'); }
+        if ($line =~ /^\s*ENABLE_BACKUPS\s*=\s*/i)    { $enable_backups    = &strip($'); }
+        if ($line =~ /^\s*ENABLE_STAGE1\s*=\s*/i)     { $enable_stage1     = &strip($'); }
+        if ($line =~ /^\s*ENABLE_STAGE2\s*=\s*/i)     { $enable_stage2     = &strip($'); }
+        if ($line =~ /^\s*ENABLE_STAGE3\s*=\s*/i)     { $enable_stage3     = &strip($'); }
+        if ($line =~ /^\s*ENABLE_STAGE4\s*=\s*/i)     { $enable_stage4     = &strip($'); }
+        if ($line =~ /^\s*ENABLE_STAGE5\s*=\s*/i)     { $enable_stage5     = &strip($'); }
+        if ($line =~ /^\s*VIEW_TOOL\s*=\s*/i)         { $view_tool         = &strip($'); }
+        if ($line =~ /^\s*BACKUP_PATH\s*=\s*/i)       { $backup_path       = &strip($'); }
+        if ($line =~ /^\s*ALIASFILE\s*=\s*/i)         { $alias_file        = &strip($'); }
+        if ($line =~ /^\s*ALIAS_FILE\s*=\s*/i)        { $alias_file        = &strip($'); }
+        if ($line =~ /^\s*HOSTS_FILE\s*=\s*/i)        { $hosts_file        = &strip($'); }
+        if ($line =~ /^\s*INDEXFILE\s*=\s*/i)         { $index_file        = &strip($'); }
+        if ($line =~ /^\s*INDEX_FILE\s*=\s*/i)        { $index_file        = &strip($'); }
+        if ($line =~ /^\s*PKG_DB\s*=\s*/i)            { $pkg_db            = &strip($'); }
+        if ($line =~ /^\s*PORTAGE_HOOK\s*=\s*/i)      { $portage_hook      = &strip($'); }
+        if ($line =~ /^\s*PALUDIS_HOOK\s*=\s*/i)      { $paludis_hook      = &strip($'); }
+        if ($line =~ /^\s*LOGFILE\s*=\s*/i)           { $log_file          = &strip($'); }
+        if ($line =~ /^\s*LOG_FILE\s*=\s*/i)          { $log_file          = &strip($'); }
+        if ($line =~ /^\s*ROOTDIR\s*=\s*/i)           { $rootdir           = &strip($'); }
+        if ($line =~ /^\s*XXDIFF_STYLE\s*=\s*/i)      { $xxdiff_style      = &strip($'); }
+        if ($line =~ /^\s*CONFIG_NEW\s*=\s*/i)        { $config_new        = &strip($'); }
+        if ($line =~ /^\s*RM_NEW\s*=\s*/i)            { $rm_new            = &strip($'); }
+        if ($line =~ /^\s*TEMP_NEW\s*=\s*/i)          { $temp_new          = &strip($'); }
+        if ($line =~ /^\s*BACKUP_NEW\s*=\s*/i)        { $backup_new        = &strip($'); }
+        if ($line =~ /^\s*RESTORE_NEW\s*=\s*/i)       { $restore_new       = &strip($'); }
+        if ($line =~ /^\s*RM_OLD\s*=\s*/i)            { $rm_old            = &strip($'); }
+        if ($line =~ /^\s*TEMP_OLD\s*=\s*/i)          { $temp_old          = &strip($'); }
+        if ($line =~ /^\s*BACKUP_OLD\s*=\s*/i)        { $backup_old        = &strip($'); }
+        if ($line =~ /^\s*RESTORE_OLD\s*=\s*/i)       { $restore_old       = &strip($'); }
+        if ($line =~ /^\s*MERGED\s*=\s*/i)            { $merged            = &strip($'); }
+    }
+    close(FILE);
+# Check for trailing slash on backup_path...
+    if ($backup_path =~ /\/$/) { chop($backup_path); }   # remove trailing slash if found
+# Check for trailing slash on backup_path...
+    if ($backup_path =~ /\/$/) { chop($backup_path); }   # remove trailing slash if found
+# Check if backup_path exists...
+    if (! -e $backup_path) { `mkdir -p $backup_path`; }
+# Get remote hosts information from /etc/cfg-update.hosts...
+    my @mount_point;
+    my @mount_cmd;
+    my @unmount_cmd;
+    my $mount_first    = 0;
+    my $mount_last     = 0;
+    my $mount_count    = 0;
+       $mount_point[0] = "";          # set localhost as the first host (0 = first element)
+       $mount_cmd[0]   = "";          # leave empty for localhost
+       $unmount_cmd[0] = "";          # leave empty for localhost
+    if (-f "$hosts_file") {
+        open(FILE, "$hosts_file") || die "Can't open file: $hosts_file!\n";
+        my $i = 1;          # start adding hosts from second element (first element is localhost!)
+        while (my $line = <FILE>) {
+            chomp $line;
+            if ($line =~ /^\s*MOUNT_POINT\s*=\s*/i) { $mount_point[$i] = &strip($'); $i++; }
+        }
+        close(FILE);        # NOTE: if the -n option is not found the @mount_point list will be emptied in sub check_flags!
+        for (my $i = 1; $i < @mount_point; $i++) {
+            if ($mount_point[$i] !~ /\/$/) { $mount_point[$i] = $mount_point[$i]."/"; }   # add a trailing slash if it's missing
+        }
+        open(FILE, $hosts_file) || die "Can't open file: $hosts_file!\n";
+        $i = 1;
+        while (my $line = <FILE>) {
+            chomp $line;
+            if ($line =~ /^\s*MOUNT_CMD\s*=\s*/i)   { $mount_cmd[$i] = &strip_comment($'); $i++; }
+        }
+        close(FILE);
+        open(FILE, $hosts_file) || die "Can't open file: $hosts_file!\n";
+        $i = 1;
+        while (my $line = <FILE>) {
+            chomp $line;
+            if ($line =~ /^\s*UNMOUNT_CMD\s*=\s*/i) { $unmount_cmd[$i] = &strip_comment($'); $i++; }
+        }
+        close(FILE);        # NOTE: if the -n option is not found the @mount_point list will be emptied in sub check_flags!
+    }
+# Other global variables...
+    my $bar1          = "________________________________________________________________________________\n";
+    my $bar2          = "--------------------------------------------------------------------------------";
+    my $spacer        = "$progname $version"; $spacer =~ s/./ /g;
+    my $package       = "";
+    my $state         = "";
+    my $state0        = "--";
+    my $state1        = "MF";
+    my $state2        = "MB";
+    my $state3        = "UF";
+    my $state4        = "UB";
+    my $state5        = "CF";
+    my $state6        = "CB";
+    my $state7        = "LF";
+    my $state8        = "FL";
+    my $state9        = "LL";
+    my $vstate        = "";
+    my $vstate0       = "No index found   ";
+    my $vstate1       = "Modified File    ";
+    my $vstate2       = "Modified Binary  ";
+    my $vstate3       = "Unmodified File  ";
+    my $vstate4       = "Unmodified Binary";
+    my $vstate5       = "Custom File      ";
+    my $vstate6       = "Custom Binary    ";
+    my $vstate7       = "Link to File     ";
+    my $vstate8       = "File to Link     ";
+    my $vstate9       = "Link to Link     ";
+###    my $indexing_complete = "undefined";
+    my $md5sum;
+    my $md5sum_file;
+    my $md5sum_index;
+    my $md5sum_before;
+    my $md5sum_update;
+    my $md5sum_merged;
+    my $md5sum_after;
+    my $show_warning;
+    my $threeway_update;
+    my $tool_needs_gui;
+    my $tool_supports_2way;
+    my $tool_supports_3way;
+    my $tool_saves_mergefile_when_aborted;
+    my $merge_conflict;
+    my $ancestor_found;
+    my $cmd;
+    my $host_path;
+    my @dir;
+    my @maskdir;
+    my @list;
+    my @stage1_queue;
+    my @stage2_queue;
+    my @stage3_queue;
+    my @stage4_queue;
+    my @stage5_queue;
+    my @merge_history;
+    my $input;
+    my $key;
+    my $num;
+    my $count;
+    my $totalcount;
+    my $path;
+    my $file;
+    my $file1;        # /path/file                  <--  current /etc/foo
+    my $file1_without_host; #                       <--  if file is /remote_host//etc/foo the host will be stripped
+    my $file2;        # /path/._cfg0000_file        <--  current /etc/._cfg0000_foo
+    my $file3;        # /path/._old-cfg_file        <--  previous /etc/foo
+    my $file4;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
+    my $file5;        # /path/file.merge            <--  merged result
+    my $file6;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
+    my $file7;        # /path/._temp_new-cfg_file   <--  temporary copy of current /etc/._cfg0000_foo during merging
+    my $executable;
+    my $ancestor;
+    my $log_pkg   = "";
+    my $index_pkg = "";
+    my $tab       = "";
+    my $env       = " ";
+
+######################################################################################################################
+#                                          COMMANDLINE ARGUMENT HANDLING                                            #
+######################################################################################################################
+
+# Set variables for commandline arguments...
+    my $opt_i = 0;
+    my $opt_f = 0;
+    my $opt_s = 0;
+    my $opt_l = 0;
+    my $opt_u = 0;
+    my $opt_b = 0;
+    my $opt_r = 0;
+    my $opt_a = 0;
+    my $opt_m = 0;
+    my $opt_d = 0;
+    my $opt_p = 0;
+    my $opt_v = 0;
+    my $opt_t = "novalue"; # if this option is used without arguments, "novalue" will change in ""
+    my $opt_h = "novalue"; # if this option is used without arguments, "novalue" will change in ""
+    my $opt_help = 0;
+    my $opt_ebuild = 0;
+    my $opt_paludis = 0;
+    my $opt_test_code = 0;
+    my $opt_check_hosts = 0;
+    my $opt_mount_hosts = 0;
+    my $opt_unmount_hosts = 0;
+    my $opt_check_packages = 0;
+    my $opt_move_backups = 0;
+#    my $opt_enable_portage_hook = 0;
+#    my $opt_enable_paludis_hook = 0;
+    my $opt_disable_portage_hook = 0;
+    my $opt_disable_paludis_hook = 0;
+    my $opt_optimize_backups = 0;
+# Running this loop 25 times should be sufficient to extract all arguments...
+    for (my $j = 0; $j < 25; ++$j) {
+        GetOptions ('f|force+'                 => \$opt_f);
+        GetOptions ('i|index+'                 => \$opt_i);
+        GetOptions ('s|show-protected-dirs+'   => \$opt_s);
+        GetOptions ('l|list+'                  => \$opt_l);
+        GetOptions ('u|update+'                => \$opt_u);
+        GetOptions ('b|backups+'               => \$opt_b);
+        GetOptions ('r|restore:i'              => \$opt_r);
+        GetOptions ('a|automatic-only+'        => \$opt_a);
+        GetOptions ('m|manual-only+'           => \$opt_m);
+        GetOptions ('h|host=s'                 => \$opt_h);
+        GetOptions ('d|debug+'                 => \$opt_d);
+        GetOptions ('p|pretend+'               => \$opt_p);
+        GetOptions ('v|verbose+'               => \$opt_v);
+        GetOptions ('t|tool=s'                 => \$opt_t);
+        GetOptions ('help+'                    => \$opt_help);
+        GetOptions ('disable-portage-hook+'    => \$opt_disable_portage_hook);
+        GetOptions ('disable-paludis-hook+'    => \$opt_disable_paludis_hook);
+        GetOptions ('paludis+'                 => \$opt_paludis);
+        GetOptions ('ebuild+'                  => \$opt_ebuild);
+        GetOptions ('test+'                    => \$opt_test_code);
+        GetOptions ('check+'                   => \$opt_check_hosts);
+        GetOptions ('mount+'                   => \$opt_mount_hosts);
+        GetOptions ('unmount+'                 => \$opt_unmount_hosts);
+        GetOptions ('move-backups+'            => \$opt_move_backups);
+        GetOptions ('check-packages+'          => \$opt_check_packages);
+        GetOptions ('optimize-backups+'        => \$opt_optimize_backups);
+    }
+# Update the mergetool and mergetoolname variable with optional commandline argument -t...
+    if ($opt_t !~ /^novalue$/) {
+        $merge_tool = $opt_t;
+        $merge_tool_name = basename($merge_tool);
+    } else {
+# Or update the mergetoolname with the override value from the /etc/cfg-update.conf...
+        $merge_tool_name = basename($merge_tool);
+    }
+    $mount_count = @mount_point-1;
+# If --mount, --check, --unmount are being used we should include all remote hosts...
+    if (($opt_check_hosts > 0) || ($opt_mount_hosts > 0) || ($opt_unmount_hosts > 0)) {
+        $opt_h = "0-$mount_count";
+        $mount_first = 0;
+        $mount_last  = $mount_count;
+    } else {
+# If --mount, --check, --unmount are not being used, we should determine which hosts need to be excluded...
+        if ($opt_h =~ /^novalue$/) {
+            $mount_first = 0;
+            $mount_last  = 0;
+            $mount_count = 1;
+        } else {
+# Exclude remote hosts from the list if they do not fall within specified range [x] or [x-y]...
+            $_ = $opt_h; /^\d+/; $mount_first = $&;                     # take all digits until reaching non-digit "-"
+            if ($mount_first =~ /^$/) {                                 # reset first to 0 = localhost-only
+                $mount_first = 0;
+                print "Invalid number(s) found in -h option...\n";
+                print "Specify a number or range from 0-$mount_count!\n";
+                exit;
+            } else {
+                $_ = $opt_h; /^\d+-/; $mount_last = $';                 # take everything behind "digits-"
+                if ($mount_last !~ /^\d+$/) {                           # validate if last is a number
+                    if ($mount_last =~ /^$/) {                          # if only [x] has been specified, make last same as first
+                        $mount_last = $mount_first;
+                    } else {
+                        print "Invalid number(s) found in -h option!\n";
+                        print "Specify a number or range from 0-$mount_count!\n";
+                        exit;
+                    }
+                }
+            }
+            if ($mount_first > $mount_last) {                           # check order, reverse if neccesary
+                my $temp = $mount_first;
+                $mount_first = $mount_last;
+                $mount_last = $temp;
+            }
+            if ($mount_last > $mount_count) {                           # out of range check
+                print "Value out of range in -h option...\n";
+                print "Specify a number or range from 0-$mount_count!\n";
+                exit;
+            }
+            if ($mount_first == $mount_last) {                          # single value, not a range
+                print "Checking host $mount_first...\n";
+            } else {
+                print "Checking hosts $mount_first-$mount_last...\n";
+            }
+            for (my $i = $mount_first; $i <= $mount_last; $i++) {       # finally we check each specified host
+                if ($i == 0) { print "     Localhost  "; }
+                if ($i > 0) { print "     $mount_point[$i]  "; }
+                &remote_host_checks("$mount_point[$i]",$i);
+            }
+        }
+    }
+# Enable stages depending on -a or -m flag...
+    if (($opt_a >= 1) && ($opt_m >= 1)) {
+        print "You cannot use flags -a and -m at the same time!\n";
+        exit;
+    }
+    if (($opt_m >= 1) && ($opt_a == 0)) {
+        $enable_stage1  = "no";
+        $enable_stage2  = "no";
+        $enable_stage3  = "yes";
+        $enable_stage4  = "yes";
+        $enable_stage5  = "yes";
+    }
+    if (($opt_a >= 1) && ($opt_m == 0)) {
+        $enable_stage1  = "yes";
+        $enable_stage2  = "yes";
+        $enable_stage3  = "no";
+        $enable_stage4  = "no";
+        $enable_stage5  = "no";
+    }
+# If debug mode is detected show most important variables...
+    if ($opt_d >= 1) { &show_debug_info; }
+# Force building the checksum-index if it's missing (except when --ebuild option is used)...
+    if (($opt_ebuild == 0) && (!-e "$index_file")) {
+        my $uid = `id -u`;
+        chomp $uid;
+        if ($uid != 0) {
+            print "$tab"."$index_file not found...\n";
+            print "$tab"."You need root privileges to create the index...\n";
+            exit;
+        } else {
+            if (-e "/usr/bin/paludis") {
+                $pkg_manager = "Paludis";
+                $install_log = "/var/log/paludis.log";
+                $find_string = "finished install of package";
+            } elsif (-e "/usr/bin/emerge") {
+                $pkg_manager = "Portage";
+                $install_log = "/var/log/emerge.log";
+                $find_string = "::: completed emerge";
+            }
+            &find_protected_dirs;
+            &build_index;
+        }
+    }
+# If --index --paludis is used (in Paludis hook) then set the package manager to Paludis and check/build index...
+    if (($opt_i > 0) && ($opt_paludis > 0)) {
+        $pkg_manager = "Paludis";
+        $install_log = "/var/log/paludis.log";
+        $find_string = "finished install of package";
+        &root_only;
+        &check_index;
+        exit;
+    }
+# If only --index is used (in Portage hook) then set the package manager to Portage and check/build index...
+    if ($opt_i > 0) {
+        $pkg_manager = "Portage";
+        $install_log = "/var/log/emerge.log";
+        $find_string = "::: completed emerge";
+        &root_only;
+        &check_index;
+        exit;
+    }
+# Check if /root/.bashrc exists (except when --ebuild option is used)...
+    if (($opt_ebuild == 0) && (!-f "$alias_file") && ($alias_file = "/root/.bashrc")) {
+        print "$tab"."  $alias_file not found!\n";
+        print "$tab"."  This file is important for properly setting up the root account.\n";
+        &root_only("Can't create a pre-configured $alias_file if you're not root...");
+        `cp -pP /usr/lib/cfg-update/.bashrc $alias_file $debug`;
+        print "$tab"."  Created a pre-configured $alias_file file for you...\n";
+        print "$tab"."  The bash shell will now load /etc/profile when you \"su\" to root...\n";
+        print BOLD YELLOW "$tab"."  Now type: \"source $alias_file\" to load it.\n";
+        exit;
+    }
+# Check the package manager hooks and enable them if possible (except when --ebuild option is used)...
+    if ($opt_ebuild == 0) { &check_hooks; }
+# Check the mergetool (except when --ebuild option is used)...
+    if ($opt_ebuild == 0) { &check_tool; }
+
+######################################################################################################################
+#                                   EXECUTE SELECTED RUNMODE SUBROUTINE                                              #
+######################################################################################################################
+
+# Go to runmode subroutine (optionally preceeded by checks) if a corresponding argument is found. Exit when done...
+    if ($opt_test_code > 0)            { &test_code; exit; }
+    if ($opt_help > 0)                 { &print_usage; exit; }
+    if ($opt_mount_hosts > 0)          { &root_only; &mount_hosts; exit;}
+    if ($opt_check_hosts > 0)          { &root_only; &check_hosts; exit;}
+    if ($opt_s > 0)                    { &list_dirs; exit;}
+    if ($opt_l > 0)                    { &list_updates; exit;}
+    if ($opt_u > 0)                    { &root_only; &update_files; exit; }
+    if ($opt_b > 0)                    { &list_backups; exit; }
+    if ($opt_r > 0)                    { &root_only; &restore_backups($opt_r); exit; }
+    if ($opt_disable_portage_hook > 0) { &root_only; &disable_portage_hook; exit; }
+    if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
+    if ($opt_check_packages > 0)       { &check_packages; exit; }
+    if ($opt_move_backups > 0)         { &root_only; &move_backups; exit; }
+    if ($opt_optimize_backups > 0)     { &root_only; &optimize_backups; exit; }
+    if ($opt_unmount_hosts > 0)        { &root_only; &unmount_hosts; exit;}
+# If none of the above options are used, check for undocumented usage modes (2-way and 3-way diff mode)
+    if ((@ARGV == 2) && (-f $ARGV[0]) && (-f $ARGV[1]))                  { &root_only; &diff_two_files; exit;   } # Simply parsing two files to diff/merge tool
+    if ((@ARGV == 3) && (-f $ARGV[0]) && (-f $ARGV[1]) && (-f $ARGV[2])) { &root_only; &diff_three_files; exit; } # Simply parsing three files to diff/merge tool
+# Show help screen when invalid options are used...
+    if ((@ARGV > 1) || ($opt_t !~ /^novalue$/)) { &print_usage; exit; }
+# Exit when there's nothing left to do...
+    print "$progname: missing valid options\n";
+    print "Try `$progname --help' for more information.\n";
+    exit;
+
+######################################################################################################################
+#                                     ALL SUBROUTINES BELOW THIS LINE                                                #
+######################################################################################################################
+
+sub test_code{ #RUNMODE# --test
+# Add your test code here and run "cfg-update --test" to execute it...
+    print "Nothing to test...\n";
+}
+
+sub strip{ #ARGS# ("linefromfile")
+    my $string = $_[0];
+    $string =~ s/'//g;     # strip all single-quotes
+    $string =~ s/"//g;     # strip all double-quotes
+    $string =~ s/;//g;     # strip all semi-colons
+    $string =~ s/\s//g;    # strip all whitespace
+    $string =~ s/#.*//;    # strip comment
+# Return a string without whitespace, quotes and comments
+    $string;
+}
+
+sub strip_comment{ #ARGS# ("linefromfile")
+    my $string = $_[0];
+    $string =~ s/^\s+//;   # strip leading whitespace
+    $string =~ s/#.*//;    # strip comment
+    $string =~ s/\s+$//;   # strip trailing whitespace
+# Return a string without leading or trailing whitespace and without comments
+    $string;
+}
+
+sub readkey{
+    if ($opt_d >= 1) { print "\n$tab"."<readkey>\n"; $tab = $tab."    "; print "$tab"; }
+    $ENV{readkey}=q{() { read -n1 -r; printf "$REPLY"; }};   #
+    $key = `bash -c readkey`;                                # read a single key
+    print "$tab"."\n";                                       #
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</readkey>\n"; }
+}
+
+sub md5sum{ #ARGS# ("file")
+    if ($opt_d >= 1) { print "$tab"."<md5sum>\n"; $tab = $tab."    "; }
+    if ($opt_d >= 1) { print "$tab"."  md5sum $_[0] $debug | awk '{ print \$1 }' $debug\n"; }
+    chomp ($md5sum = `md5sum "$_[0]" $debug | awk '{ print \$1 }' $debug`); # sets global variable $md5sum
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</md5sum>\n"; }
+}
+
+sub root_only{ #ARGS# ("text")
+    if ($opt_d >= 1) { print "$tab"."<root_only>\n"; $tab = $tab."    "; }
+    if ($opt_d >= 1) { print "$tab"."  id -u\n"; }
+    my $text; if ($_[0]) { $text = $_[0] } else { $text = "You need root privileges for this mode..." }
+    my $uid = `id -u`;
+    chomp $uid;
+    if ($uid != 0) {
+        print "$tab".">>> "; print BOLD WHITE "$progname-$version"; print ": $text\n";
+        if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</root_only>\n"; }
+        exit;
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</root_only>\n"; }
+}
+
+sub check_hooks {
+    if ($opt_d >= 1) { print "$tab"."<check_hooks>\n"; $tab = $tab."    "; }
+# Try to enable the Paludis hook...
+    if (-e "/usr/bin/paludis") {
+        my $hook_dir = dirname($paludis_hook);
+        if (!-d "$hook_dir") {
+            print "$tab"."Paludis hook directory $hook_dir not found...\n";
+            print "$tab"."Can't enable Paludis hook...\n";
+            print "$tab"."Make sure that Paludis is installed properly first!\n";
+        } else {
+            if (!-f "$paludis_hook") {
+                &root_only("Can't enable the Paludis hook if you're not root...");
+                `cp -pP /usr/lib/cfg-update/cfg-update_indexing $paludis_hook $debug`;
+                `chmod +x "$paludis_hook" $debug`;
+                if ($opt_d >= 1) { print "$tab"."Created Paludis hook $paludis_hook...\n"; }
+            } else {
+                if ($opt_d >= 1) { print "$tab"."Paludis hook is already enabled...\n"; }
+                `chmod +x "$paludis_hook" $debug`;
+            }
+        }
+    }
+# Try to enable the Portage hook...
+    if (-e "/usr/bin/emerge") {
+        if (-e "$portage_hook") {
+            local $ENV{LC_ALL}="C";
+            if (`grep '^.*cfg-update.*--index' $portage_hook` =~ /cfg-update/) {
+                local $ENV{LC_ALL}="C";
+                if (`grep '^#.*cfg-update.*--index' $portage_hook` =~ /cfg-update/) {
+                    &root_only("Can't enable the Portage hook if you're not root...");
+                    `perl -p -i -e 's/#if \\[ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" \\] && \\[ -e \\"\\/usr\\/bin\\/cfg-update\\" \\]; then cfg-update --index; fi/if \\[ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" \\] && \\[ -e \\"\\/usr\\/bin\\/cfg-update\\" \\]; then cfg-update --index; fi/;' $portage_hook`;
+                    if ($opt_d >= 1) { print "$tab"."Enabled Portage hook in $portage_hook...\n"; }
+                } else {
+                    if ($opt_d >= 1) { print "$tab"."Portage hook is already enabled...\n"; }
+                }
+            } else {
+                &root_only("Can't add the Portage hook if you're not root...");
+                `echo >> $portage_hook`;
+                `echo "# This hook is neccesary for automatic updating of the cfg-update index, please do not modify it!" >> $portage_hook`;
+                `echo "if [ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" ] && [ -e \\"/usr/bin/cfg-update\\" ]; then cfg-update --index; fi" >> $portage_hook`;
+                `echo >> $portage_hook`;
+                if ($opt_d >= 1) { print "$tab"."Added Portage hook in $portage_hook...\n"; }
+            }
+        } else {
+            &root_only("Can't create the Portage hook if you're not root...");
+            `echo >> $portage_hook`;
+            `echo "# This hook is neccesary for automatic updating of the cfg-update index, please do not modify it!" >> $portage_hook`;
+            `echo "if [ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" ] && [ -e \\"/usr/bin/cfg-update\\" ]; then cfg-update --index; fi" >> $portage_hook`;
+            `echo >> $portage_hook`;
+            if ($opt_d >= 1) { print "$tab"."Created Portage hook in $portage_hook...\n"; }
+        }
+    }
+# Check for old emerge alias and tell user to remove it...
+    if (-e "$alias_file") {
+        local $ENV{LC_ALL}="C";
+        if (`grep ".*alias.*emerge.*=" $alias_file $debug` =~ /cfg-update/) {
+            local $ENV{LC_ALL}="C";
+            if (`grep ".*#.*alias.*emerge.*=" $alias_file $debug` =~ /cfg-update/) {
+                # old alias is already disabled...
+            } else {
+                print "*******************************************************************************\n";
+                print "$tab"."The alias for emerge, used for updating the index, is now deprecated...\n";
+                print "$tab"."$progname now uses hooks instead of the alias for emerge...\n";
+                if (-e "/usr/bin/emerge") { print "$tab"."For Portage a new hook has been created in $portage_hook\n"; }
+                if (-e "/usr/bin/paludis") { print "$tab"."For Paludis a new hook has been created in $paludis_hook\n"; }
+                print BOLD YELLOW "$tab"."You should remove the alias for emerge in $alias_file\n";
+                print BOLD YELLOW "$tab"."followed by running this command: \"unalias emerge\"\n";
+                print "*******************************************************************************\n";
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_hooks>\n"; }
+}
+
+sub check_packages { #RUNMODE# --check-packages
+    if ($opt_d >= 1) { print "$tab"."<check_packages>\n"; $tab = $tab."    "; }
+# Paludis version <0.20 wrote the wrong MD5-checksum in the CONTENTS file during installation.
+# This subroutine tries to find if there are affected packages on the system.
+# If it finds any, it will exit and prompt the user to update these packages...
+    my @pkg_list;
+    my @pkg_list_bad;
+    my $pkg_cat;
+    my $pkg_name_ver;
+    @pkg_list = `echo /var/db/pkg/*/*/VDB_FORMAT $debug | xargs grep -H "paludis" $debug`;
+    chomp @pkg_list;
+    &find_protected_dirs;
+    for (my $i = 0; $i < @pkg_list; $i++) {
+        $_ = $pkg_list[$i]; /^$pkg_db\//; $pkg_name_ver = $';      # take everything behind "/var/db/pkg/"
+        $_ = $pkg_name_ver; /\/VDB_FORMAT/; $pkg_name_ver = $`;    # take everything infront of "/VDB_FORMAT"
+        $_ = $pkg_name_ver; /\//; $pkg_name_ver = $';              # take everything behind "/"
+        $pkg_cat = $`;                                             # take everything infront of "/"
+        if (($opt_d >= 1)||($opt_v >= 1)) { print "$i. Checking : $pkg_cat/$pkg_name_ver\n"; }
+        my $installer = `grep "paludis" /var/db/pkg/$pkg_cat/$pkg_name_ver/PKGMANAGER $debug`;
+        chomp $installer;
+        if (!$installer) {
+# Paludis version >= 0.2.5 and < 0.6.7 = possibly BAD checksums in CONTENTS file, abort...
+            for (my $i = 0; $i < @dir; $i++) {
+                if (`grep "^obj $dir[$i]" /var/db/pkg/$pkg_cat/$pkg_name_ver/CONTENTS $debug`) {
+                    push(@pkg_list_bad,"=$pkg_cat/$pkg_name_ver ");
+                    if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD RED "Added to rebuild_list: has files in CONFIG_PROTECT directory, unsafe!\n"; }
+                } else {
+                    if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Has no files in CONFIG_PROTECT directory, files are safe...\n"; }
+                }
+            }
+        } else {
+            if (($opt_d >= 1)||($opt_v >= 1)) { print "Installer    = $installer\n"; }
+            $_ = "";
+            $_ = $installer; /paludis-/; $installer = $';  # take everything behind "paludis-"
+            $_ = $installer; /\./; $installer = $';        # take everything behind "."
+            $_ = $installer; /\./; $installer = $`;        # take everything infront of "."
+            if ($installer <= 19) {
+# Paludis version >= 0.6.7 and < 0.20 = possibly BAD checksums in CONTENTS file, abort...
+                for (my $i = 0; $i < @dir; $i++) {
+                    if (`grep "^obj $dir[$i]" /var/db/pkg/$pkg_cat/$pkg_name_ver/CONTENTS $debug`) {
+                        push(@pkg_list_bad,"=$pkg_cat/$pkg_name_ver");
+                        if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD RED "Added to rebuild_list: has files in CONFIG_PROTECT directory, unsafe!\n"; }
+                    } else {
+                        if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Has no files in CONFIG_PROTECT directory, files are safe...\n"; }
+                    }
+                }
+            } else {
+# Paludis version >= 0.20 = GOOD checksums in CONTENTS file, continue...
+                if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Installed with Paludis 0.20.0 or higher, files are safe...\n"; }
+            }
+        }
+        if (($opt_d >= 1)||($opt_v >= 1)) { print "\n"; }
+    }
+# Print instructions and exit if BAD packages have been found, else continue...
+    if (@pkg_list_bad > 0) {
+        my $count1 = @pkg_list;
+        my $count2 = @pkg_list_bad;
+        print "*******************************************************************************\n";
+        print "\n";
+        print "A bug in Paludis <0.20.0 caused the wrong checksums to be written to the\n";
+        print "CONTENTS files which are used by $progname to determine if files have been\n";
+        print "modified by you. Due to these faulty checksums these files appear to be\n";
+        print "unmodified. So $progname will automatically replace them with the new default\n";
+        print "configfile! *** YOU RISK LOSING CUSTOM SETTINGS IN CRITICAL FILES!!! ***\n";
+        print "\n";
+        print "Found $count1 packages installed with Paludis version < 0.20.0\n";
+        print "You need to re-install $count2 of these packages with Paludis 0.20.0 (or higher)\n";
+        print "to avoid problems with future updating of the configuration files from these\n";
+        print "packages!\n";
+        print "\n";
+        print "Please check if Paludis version is >=0.20.0 and run the following command:\n";
+        print "\n";
+        print BOLD YELLOW "paludis -i -1 --dl-upgrade as-needed @pkg_list_bad\n";
+        print "\n";
+        print "VERY IMPORTANT: when done re-installing the above packages, you need to run the\n";
+        print "run the following command before updating any configfiles:\n";
+        print "\n";
+        print BOLD YELLOW "$progname --force --index\n";
+        print "\n";
+        print "If you do not want to do the above you should disable stage1 permanently in\n";
+        print "$settings otherwise $progname will automatically overwrite the\n";
+        print "configfiles belonging to the affected packages. YOU HAVE BEEN WARNED!!!\n";
+        print "\n";
+        print "*******************************************************************************\n";
+    } else {
+        print "No need to re-install packages...\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_packages>\n"; }
+}
+
+sub check_index{ #RUNMODE# -i, --index
+    if ($opt_d >= 1) { print "$tab"."<check_index>\n"; $tab = $tab."    "; }
+# Get the first line from the index, it contains the name of the package manager and timestamp of last installed package...
+    if ($opt_d >= 1) { print "$tab"."  head -n1 $index_file\n"; }
+    my $first_line = `head -n1 $index_file $debug`;
+    chomp $first_line;
+# Get the timestamp of the last installed package from index_file, needed to determine if index is up-to-date...
+    my $index_pkg_manager;
+    $_ = $first_line; /:/; $index_pkg_manager = $`; # take string to left of ":", that should be the pkg_manager
+    $_ = $first_line; /:/; $index_pkg = $';         # take string to right of ":", that should be the timestamp of the last installed package
+    local $ENV{LC_ALL}="C";
+    if (!-e $install_log) {
+        print "$tab"."* $install_log not found...\n";
+        print "$tab"."  This file is needed to determine if the indexing can be skipped...\n";
+        $log_pkg = "$install_log not found!";
+    } else {
+# Get the timestamp of the last installed package from install_log, needed to determine if index is up-to-date...
+        if ($opt_d >= 1) { print "$tab"."  tac $install_log | sed -n '/$find_string/{p;q;}'\n"; }
+        $log_pkg = `tac $install_log | sed -n '/$find_string/{p;q;}'`;
+        chomp $log_pkg;
+        $_ = $log_pkg; /:/; $log_pkg = $`;     # take the timestamp to the left of first : character
+    }
+    if ($opt_d >= 1) { print "$tab"."  Last installed package according to logfile : $log_pkg\n"; }
+# Print status of index when -d, --debug is used...
+    if ($opt_d >= 1) { print "$tab"."  Last installed package according to index   : $index_pkg\n"; }
+    if (($opt_d >= 1) && ($log_pkg !~ $index_pkg)) { print "$tab"."  Checksum-index needs to be updated...\n"; }
+    if (($opt_d >= 1) && ($log_pkg =~ $index_pkg)) { print "$tab"."  Checksum-index is up-to-date...\n"; }
+# If last installed package according to index does not match last installed package according to log, then update the index...
+    if (($log_pkg !~ $index_pkg) || ($opt_f > 0)) {
+# Empty the list of remote hosts (each host is responsible for creating it's own checksum-index)...
+        splice(@mount_point);
+        $mount_point[0] = "";
+        &find_updates;
+        &build_index;
+    } else {
+        print "$tab".">>> "; print BOLD WHITE "$progname-$version"; print ": Checksum index is up-to-date ...\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_index>\n"; }
+}
+
+sub build_index{
+    if ($opt_d >= 1) { print "\n$tab"."<build_index>\n"; $tab = $tab."    "; }
+    if ((@list == 0) || ($opt_f > 0)) {
+        print "$tab".">>> "; print BOLD WHITE "$progname-$version"; print ": Creating checksum index...\n";
+        open(FILE, ">$index_file") || die "$tab"."  Can't open $index_file\n";
+            if ((!-e $install_log) || ($opt_f > 0)) {
+                print FILE "$pkg_manager:0000000000\n";
+            } else {
+                print FILE "$pkg_manager:$log_pkg\n";
+            }
+        close(FILE);
+        local $ENV{LC_ALL}="C";
+        if ($opt_d >= 1) { print "$tab"."echo $pkg_db/*/*/CONTENTS | xargs grep \"^obj \" | cut -d\" \" -f2-3 $debug >> $index_file`\n"; }
+        for (my $i = 0; $i < @dir; ++$i) {
+# The following command needs to use echo and xargs because cat and grep both have limitations on the number of files they can handle
+            `echo $pkg_db/*/*/CONTENTS $debug | xargs grep "^obj $dir[$i]" | cut -d" " -f2-3 $debug >> $index_file`; # checksum-index of all protected files, needed for automatic updating of unmodified configfiles
+        }
+    } else {
+        print "$tab".">>> "; print BOLD WHITE "$progname-$version"; print ": Skipping checksum index updating...\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</build_index>\n"; }
+}
+
+sub check_gui{
+    if ($opt_d >= 1) { print "$tab"."<check_gui>\n"; $tab = $tab."    "; }
+    if ($opt_d >= 1) { print "$tab"."merge_tool       = $merge_tool\n"; }
+    if ($opt_d >= 1) { print "$tab"."merge_tool_name  = $merge_tool_name\n"; }
+    if ($opt_d >= 1) { print "$tab"."tool_needs_gui   = $tool_needs_gui\n"; }
+    if ($opt_d >= 1) { print "$tab"."xhost &>/dev/null; echo $?\n"; }
+    if ((`xhost &>/dev/null; echo \$?` =~ "1") && ($tool_needs_gui =~ "yes") && ($opt_a == 0) && ($opt_p == 0)) {
+        print BOLD YELLOW "$tab"."* GUI not available, unable to run the mergetool set in $settings!\n";
+        print BOLD YELLOW "$tab"."  Run $progname from within an X-terminal if you want to use a GUI mergetool.\n";
+        print "$tab"."  If you are getting this from within an X-terminal, you should try running\n";
+        print "$tab"."  \"xhost +localhost\" as the user who started the X-server.\n";
+        print "$tab"."  If you use this script on a system without an X-server you should permanently\n";
+        print "$tab"."  set the MERGETOOL variable in $settings to vimdiff or sdiff.\n";
+        print "$tab"."  I recommend the more advanced vimdiff on systems without an X-server.\n";
+        print "$tab"."  See $website for vimdiff usage instructions.\n\n";
+        exit;
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_gui>\n"; }
+}
+
+sub check_tool{
+    if ($opt_d >= 1) { print "$tab"."<check_tool>\n"; $tab = $tab."    "; }
+# Check if tool exists...
+    if ((!-e $merge_tool) && (!-e "/usr/bin/$merge_tool_name")) {
+        print "\n";
+        print "$tab"."**********************************************************************\n";
+        print "$tab"."Mergetool \"$merge_tool\" not found...\n";
+        print "$tab"."The recommended merge tool for $progname is xxdiff, a nice GUI tool.\n\n";
+        print BOLD YELLOW "$tab"."Please install dev-util/xxdiff or change the MERGE_TOOL variable to\n";
+        print BOLD YELLOW "$tab"."your own favorite tool. See $settings for more details!\n";
+        print "$tab"."**********************************************************************\n";
+        print "\n";
+        print BOLD BLUE "$tab"."Switching to \"sdiff\" for now...\n";
+        print "\n";
+        $merge_tool = "/usr/bin/sdiff";
+        $merge_tool_name = basename($merge_tool);
+        if (!-e $merge_tool) {
+            print "$tab"."Mergetool \"$merge_tool\" also not found...\n";
+            print "$tab"."I give up!\n\n";
+            exit;
+        }
+    } else {
+        if ($opt_d >= 1) { print "$tab"."merge_tool                        = $merge_tool\n"; }
+        if ($opt_d >= 1) { print "$tab"."merge_tool_name                   = $merge_tool_name\n"; }
+    }
+# Check if tool can handle manual 2-way merges...
+    if ($merge_tool =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/sdiff$|^sdiff$|\/imediff2$|^imediff2$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/vimdiff$|^vimdiff$|\/gvimdiff$|^gvimdiff$/) {
+        $tool_supports_2way = "yes";
+        if ($opt_d >= 1) { print "$tab"."tool_supports_2way                = $tool_supports_2way\n"; }
+    } else {
+        $tool_supports_2way = "no";
+        if ($opt_d >= 1) { print "$tab"."tool_supports_2way                = $tool_supports_2way\n"; }
+        $enable_stage4 = "no";
+        if ($opt_d >= 1) { print "$tab"."stage4 disabled...\n"; }
+    }
+# Check if tool can handle manual 3-way merges...
+    if ($merge_tool =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/tkdiff$|^tkdiff$/) {
+        $tool_supports_3way = "yes";
+        if ($opt_d >= 1) { print "$tab"."tool_supports_3way                = $tool_supports_3way\n"; }
+    } else {
+        $tool_supports_3way = "no";
+        if ($opt_d >= 1) { print "$tab"."tool_supports_3way                = $tool_supports_3way\n"; }
+        $enable_stage3 = "no";
+        if ($opt_d >= 1) { print "$tab"."stage3 disabled...\n"; }
+    }
+# Check if tool saves .merge file when aborted...
+    if ($merge_tool_name =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/imediff2$|^imediff2$|\/meld$|^meld$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+        $tool_saves_mergefile_when_aborted = "yes";
+        if ($opt_d >= 1) { print "$tab"."tool_saves_mergefile_when_aborted = $tool_saves_mergefile_when_aborted\n"; }
+    } else {
+        $tool_saves_mergefile_when_aborted = "no";
+        if ($opt_d >= 1) { print "$tab"."tool_saves_mergefile_when_aborted = $tool_saves_mergefile_when_aborted\n"; }
+    }
+# Check if tool needs the GUI...
+    if ($merge_tool_name =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+        $tool_needs_gui = "yes";
+        if ($opt_d >= 1) { print "$tab"."tool_needs_gui                    = $tool_needs_gui\n"; }
+    } else {
+        $tool_needs_gui = "no";
+        if ($opt_d >= 1) { print "$tab"."tool_needs_gui                    = $tool_needs_gui\n"; }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_tool>\n"; }
+}
+
+sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
+    if ($opt_d >= 1) { print "$tab"."<launch_tool>\n"; $tab = $tab."    "; }
+    if (($_[0] =~ /execute/) && ($tool_needs_gui =~ "yes")) { &check_gui; }
+    chomp (my $screenwidth = `stty size | awk '{ print \$2 }' $debug`); # determine width of current screen or window
+    $cmd = "$_[1] $file1 $file2 $debug";                                # default command string for basic functionality with unsupported tools
+    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $file1 $file4 $file2 -M $file5 $debug"; }
+    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' $file1 $file2 -M $file5 $debug"; }
+    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -m $file1 $file2 -b $file4 -o $file5 $debug"; }
+    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 -o $file5 $debug"; }
+    if  ($_[1] =~ /\/kompare$|^kompare$/   )                                 { $cmd = "$_[1] $file2 $file1 $debug"; }
+    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $file4 $file2 $debug"; }
+    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 $debug"; }
+    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $file2 -a $file4 -o $file5 $debug"; }
+    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 -o $file5 $debug"; }
+    if  ($_[1] =~ /\/vimdiff$|^vimdiff$/   )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $file2 --nofork $debug"; }
+    if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $file2 --nofork 2>\&1>/dev/null"; }
+    if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $file5 $file1 $file2 $debug"; }
+    if  ($_[1] =~ /\/imediff2$|^imediff2$/ )                                 { $cmd = "$_[1] -c -o $file5 $file1 $file2"; }
+    if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $file5 $file1 $file2"; }
+    if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $file2 $file4 $file1 > $file5 $debug"; } # by specifying $file1 as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
+    if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $file1 $file2 $debug"; } # viewing only...
+    if  ($_[0] =~ /execute/) {
+        if ($opt_d >=1) { print "$tab"."  $cmd\n"; }
+        system("$cmd");                                                 # launch the tool
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</launch_tool>\n"; }
+}
+
+sub check_hosts{ #RUNMODE# --check
+    if ($opt_d >= 1) { print "$tab"."<check_hosts>\n"; $tab = $tab."    "; }
+    if (@mount_point > 1) {
+        for (my $i = 1; $i < @mount_point; ++$i) {
+            print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Checking $mount_point[$i]  ";
+            &remote_host_checks("$mount_point[$i]",$i);
+        }
+    } else {
+        print "$tab"."No mountpoints for remote systems found...\n";
+        print "$tab"."Check the MOUNT_POINT settings in $hosts_file\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_hosts>\n"; }
+}
+
+sub remote_host_checks{ #ARGS# ("mount_point","i")
+    if ($opt_d >= 1) { print "$tab"."<remote_host_checks>\n"; $tab = $tab."    "; }
+# Unhide STDERR messages if -v option is used
+    if ($opt_v >= 1) { $debug = ""; }
+# Do some simple checks to see if the remote filesystem is available and correctly set up
+    my $remote_backup_path = "";
+    my $mount_point = $_[0];
+       $mount_point =~ s/\/$//;  # strip trailing slash from mountpoint
+    my $num = $_[1];
+    if ($num == 0) { $mount_point = "/"; }
+    if (!-d "$mount_point") {
+        print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  Mountpoint does not exist...\n";
+    } else {
+        if (`mount | grep $mount_point` =~ /^$/) {
+            print BOLD WHITE "$tab"."["; print BOLD RED "!!"; if ($opt_check_hosts > 0) { print BOLD WHITE "]  Not mounted...\n"; } else { print BOLD WHITE "]  Mounting failed...\n"; }
+        } else {
+            if ((!-d "$mount_point/etc") || (!-d "$mount_point/usr")) {
+                print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  No /etc and /usr found behind mountpoint...\n";
+            } else {
+                if (!-f "$mount_point/$index_file") {
+                    print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  $mount_point$index_file not found...\n";
+                } else {
+                    if (!-d "$mount_point/$backup_path") {
+                        print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  $mount_point$backup_path does not exist...\n";
+                    } else {
+                        print BOLD WHITE "$tab"."["; print BOLD GREEN "OK"; print BOLD WHITE "]\n";
+                    }
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</remote_host_checks>\n"; }
+}
+
+sub mount_hosts{ #RUNMODE# --mount
+    if ($opt_d >= 1) { print "$tab"."<mount_hosts>\n"; $tab = $tab."    "; }
+# Unhide STDERR messages if -v option is used
+    if ($opt_v >= 1) { $debug = ""; }
+# Check if number of MOUNT_POINTs and MOUNT_CMDs are equal, MOUNT_POINT is leading...
+    if (@mount_point != @mount_cmd) {
+        print "$tab"."Number of MOUNT_POINTs does not match number of MOUNT_CMDs...\n";
+        print "$tab"."Each host should have 3 variables in $hosts_file:\n";
+        print "$tab"."    MOUNTPOINT  (required, must contain path of mountpoint)\n";
+        print "$tab"."    MOUNT_CMD   (required, empty value is allowed)\n";
+        print "$tab"."    UNMOUNT_CMD (required, empty value is allowed)\n";
+    } else {
+        if (@mount_cmd > 1) {
+            for (my $i = 1; $i < @mount_cmd; ++$i) {
+                if (!$mount_cmd[$i]) { $mount_cmd[$i] = ""; }
+                if ($mount_cmd[$i] !~ /^$/) {         # skip if the mount_cmd is empty
+                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Mount $mount_point[$i]  ";
+                    system("$mount_cmd[$i] $debug");
+                    &remote_host_checks("$mount_point[$i]",$i);
+                } else {
+                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Skip  $mount_point[$i] (No MOUNT_CMD specified)\n";
+                }
+            }
+        } else {
+            print "$tab"."No mount commands found...\n";
+            print "$tab"."Check the MOUNT_CMD settings in $hosts_file\n";
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</mount_hosts>\n"; }
+}
+
+sub unmount_hosts{ #RUNMODE# --unmount
+    if ($opt_d >= 1) { print "$tab"."<unmount_hosts>\n"; $tab = $tab."    "; }
+# Unhide STDERR messages if -v option is used
+    if ($opt_v >= 1) { $debug = ""; }
+# Check if number of MOUNT_POINTs and UNMOUNT_CMDs are equal, MOUNT_POINT is leading...
+    if (@mount_point != @unmount_cmd) {
+        print "$tab"."Number of MOUNT_POINTs does not match number of UNMOUNT_CMDs...\n";
+        print "$tab"."Each host should have 3 variables in $hosts_file:\n";
+        print "$tab"."    MOUNTPOINT  (required, path of mountpoint)\n";
+        print "$tab"."    MOUNT_CMD   (required, but can be empty)\n";
+        print "$tab"."    UNMOUNT_CMD (required, but can be empty)\n";
+    } else {
+        if (@unmount_cmd > 1) {
+            for (my $i = 1; $i < @unmount_cmd; ++$i) {
+                if (!$unmount_cmd[$i]) { $unmount_cmd[$i] = ""; }
+                if ($unmount_cmd[$i] !~ /^$/) {         # skip if the unmount_cmd is empty
+                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Unmount $mount_point[$i]  ";
+                    system("$unmount_cmd[$i] $debug");
+                    if (`mount | grep $mount_point[$i]` =~ /^$/) {
+                        print BOLD WHITE "["; print BOLD GREEN "OK"; print BOLD WHITE "]\n";
+                    } else {
+                        print BOLD WHITE "["; print BOLD RED "!!"; print BOLD WHITE "]"; print "(Try \"$progname -v --unmount\" to see STDERR messages)\n";
+                    }
+                } else {
+                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "No UNMOUNT_CMD specified...\n";
+                }
+            }
+        } else {
+            print "$tab"."No unmount commands found...\n";
+            print "$tab"."Check the UNMOUNT_CMD settings in $hosts_file\n";
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</unmount_hosts>\n"; }
+}
+
+sub list_dirs{ #RUNMODE# -s, --show-dirs
+    if ($opt_d >= 1) { print "$tab"."<list_dirs>\n"; $tab = $tab."    "; }
+    &find_protected_dirs;
+    print "$tab"."\n";
+    print "$tab"."These (localhost) directories are protected with CONFIG_PROTECT:\n";
+    for (my $i = 0; $i < @dir; ++$i) {
+        print "$tab"."$dir[$i]\n";
+    }
+    &find_masked_dirs;
+    print "$tab"."\n";
+    print "$tab"."These (localhost) directories are excluded with CONFIG_PROTECT_MASK:\n";
+    for (my $i = 0; $i < @maskdir; ++$i) {
+        print "$tab"."$maskdir[$i]\n";
+    }
+    print "$tab"."\n";
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</list_dirs>\n"; }
+}
+
+sub find_protected_dirs{
+    if ($opt_d >= 1) { print "$tab"."<find_protected_dirs>\n"; $tab = $tab."    "; }
+    my %seen;
+    my $i;
+    @dir = ();
+    if ($pkg_manager =~ /^portage$/i) {
+        $_ = "";                                                          # set variable to prevent warnings about m// and s/// on undefined values
+        if ($opt_d >= 1) { print "$tab"."  portageq config_protect $debug\n"; }
+        $_ = `portageq config_protect $debug`;                            # query portage for the protected dirs
+        s/\"//g;                                                          # strip " chars
+        $i = 0;
+        until ($_ =~ /^$/) {
+            /\/\S+/;
+            if (-e $&) { push(@dir, $&); }                                # ignore non-existant directories but push existing dirs into array
+            $_ = $';
+            $i++;
+        }
+        my @sdir = sort {lc($a) cmp lc($b)} @dir;                         # case-insensitive alphabetical sort from @dir to @sdir
+        %seen = ();
+        @dir = grep { ! $seen{$_} ++ } @sdir;                             # move unique elements from @sdir back to @dir (removes doubles)
+    }
+    if ($pkg_manager =~ /^paludis$/i) {
+        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT") || die "  Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT!\n";
+        while (my $line = <FILE>) {
+            chomp $line;
+            if (-e $line) { push(@dir, $line); }                          # ignore non-existant directories but push existing dirs into array
+        }
+        close(FILE);
+    }
+    if (@dir == 0) { print "$tab"."No protected directories found...\n"; }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_protected_dirs>\n"; }
+}
+
+sub find_masked_dirs{
+    if ($opt_d >= 1) { print "$tab"."<find_masked_dirs>\n"; $tab = $tab."    "; }
+    my %seen;
+    my $i;
+    @maskdir = ();
+    if ($pkg_manager =~ /^portage$/i) {
+        $_ = "";                                                          # set variable to prevent warnings about m// and s/// on undefined values
+        if ($opt_d >= 1) { print "$tab"."  portageq config_protect_mask $debug\n"; }
+        $_ = `portageq config_protect_mask $debug`;                       # query portage for the masked dirs
+        s/\"//g;                                                          # strip " chars
+        $i = 0;
+        until ($_ =~ /^$/) {
+            /\/\S+/;
+            if (-e $&) { push(@maskdir, $&); }                            # ignore non-existant directories but push existing dirs into array
+            $_ = $';
+            $i++;
+        }
+        my @sdir = sort {lc($a) cmp lc($b)} @maskdir;                     # case-insensitive alphabetical sort from @dir to @sdir
+        %seen = ();
+        @maskdir = grep { ! $seen{$_} ++ } @sdir;                         # move unique elements from @sdir back to @dir (removes doubles)
+    }
+    if ($pkg_manager =~ /^paludis$/i) {
+        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT_MASK") || die "Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT!\n";
+        while (my $line = <FILE>) {
+            chomp $line;
+            if (-e $line) { push(@dir, $line); }                          # ignore non-existant directories but push existing dirs into array
+        }
+        close(FILE);
+    }
+    if (@maskdir == 0) { print "$tab"."No masked directories found...\n"; }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_masked_dirs>\n"; }
+}
+
+sub find_updates{
+    if ($opt_d >= 1) { print "$tab"."<find_updates>\n"; $tab = $tab."    "; }
+    &find_protected_dirs;
+    @list = ();
+    for (my $i = $mount_first; $i <= $mount_last; $i++) {
+        if ($mount_point[$i]) { $host_path = $mount_point[$i]; } else { $host_path = ""; }
+        for (my $i = 0; $i < @dir; $i++) {
+            if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] -name '$config_new' $debug | sort $debug\n"; }
+            push(@list, `find "$host_path$dir[$i]" -name '$config_new' $debug | sort $debug`);
+        }
+    }
+    chomp @list;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_updates>\n"; }
+}
+
+sub prepare_filenames_for_updating{ #ARGS# ("file")
+    if ($opt_d >= 1) { print "$tab"."<prepare_filenames_for_updating>\n"; $tab = $tab."    "; }
+    $_ = dirname($_[0]);
+    if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
+        $host_path = $`;                           # put string in front of // into host_path
+        $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
+        $path = $';                                # put string behind // into path
+        $path = "/".$path."/";                     # re-add / in front and add / to end of path
+        $file = basename($_[0]);
+    } else {                                       # if // is not found make host_path empty
+        $host_path = "";
+        $path = dirname($_[0]);
+        $path = $path."/";                         # re-add / to end of path
+        $file = basename($_[0]);
+    }
+    $file =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
+    $file1 = $host_path.$path.$file;               # contains /host_path//path/filename
+    $file2 = $_[0];                                # contains /host_path//path/._cfg0000_filename
+    $file3 = $backup_old;
+    $file3 =~ s/\*/$file/;
+    $file3 = $host_path.$backup_path.$path.$file3; # contains /host_path//backup_path/path/._old-cfg_filename (previous config files)
+    $file4 = $backup_new;
+    $file4 =~ s/\*/$file/;
+    $file4 = $host_path.$backup_path.$path.$file4; # contains /host_path//backup_path/path/._new-cfg_filename (previous ._cfg0000_ files)
+    $file5 = $merged;
+    $file5 =~ s/\*/$file/;
+    $file5 = $host_path.$path.$file5;              # contains /host_path//path/filename.merge
+    $file6 = $temp_old;
+    $file6 =~ s/\*/$file/;
+    $file6 = $host_path.$backup_path.$path.$file6; # contains /host_path//backup_path/path/._temp_old-cfg_filename
+    $file7 = $temp_new;
+    $file7 =~ s/\*/$file/;
+    $file7 = $host_path.$backup_path.$path.$file7; # contains /host_path//backup_path/path/._temp_new-cfg_filename
+    if ($opt_d >= 1) {
+        print "$tab"."  host_path   = $host_path\n";
+        print "$tab"."  backup_path = $backup_path\n";
+        print "$tab"."  path        = $path\n";
+        print "$tab"."  file1       = $file1\n";
+        print "$tab"."  file2       = $file2\n";
+        print "$tab"."  file3       = $file3\n";
+        print "$tab"."  file4       = $file4\n";
+        print "$tab"."  file5       = $file5\n";
+        print "$tab"."  file6       = $file6\n";
+        print "$tab"."  file7       = $file7\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</prepare_filenames_for_updating>\n"; }
+}
+
+sub determine_state{ #DEPS# (requires that global variable $file1 contains a filename)
+    if ($opt_d >= 1) { print "$tab"."<determine_state>\n"; $tab = $tab."    "; }
+    if (-f $index_file) {
+        if ($opt_d >= 1) { if (-f $file1) { print "$tab"."  md5sum $file1 $debug | cut -d\" \" -f1 $debug\n"; }}
+        local $ENV{LC_ALL}="C";
+        if ($file1 =~ /\/\//) {           # search for // in filename, everything in front of this // is the path of the remote host
+            $host_path = $`;              # take the part of the string in front of the above match
+            $file1_without_host = "/".$'; # take the part of the string behind the above match
+        } else {
+            $host_path = "";              # if // is not found in the filename it's on the localhost
+            $file1_without_host = $file1; # if // is not found the filename stays the same
+        }
+        if (-f $file1) { chomp ($md5sum_file = `md5sum "$file1" $debug | cut -d" " -f1 $debug`); }
+        if ($opt_d >= 1) { print "$tab"."  MD5 checksum of current config file : $md5sum_file\n"; }
+        if ($opt_d >= 1) { print "$tab"."  grep \"$file1_without_host \" $host_path$index_file $debug | cut -d\" \" -f2 $debug\n"; }
+        local $ENV{LC_ALL}="C";
+        chomp ($md5sum_index = `grep "$file1_without_host " "$host_path$index_file" $debug | cut -d" " -f2 $debug`);
+        if ($opt_d >= 1) { print "$tab"."  MD5 checksum in the checksum-index  : $md5sum_index\n"; }
+        if ($md5sum_index =~ /.+/) {
+            if ($md5sum_index !~ $md5sum_file) {
+                $state = $state1; $vstate = $vstate1;                               #  1 = MF = Modified File     - checksum differs from index
+                if (-B "$file1") { $state = $state2; $vstate = $vstate2; }          #  2 = MB = Modified Binary   - you probably replaced the binary file so replace not allowed
+            } else {
+                $state = $state3; $vstate = $vstate3;                               #  3 = UF = Unmodified File   - checksum matches with index
+                if (-B "$file1") { $state = $state4; $vstate = $vstate4; }          #  4 = UB = Unmodified Binary - unmodified binary file so replace always allowed
+            }
+        } else {
+            $state = $state5; $vstate = $vstate5;                                   #  5 = CF = Custom File       - custom file not installed with portage so replace not allowed
+            if (-B "$file1") { $state = $state6; $vstate = $vstate6; }              #  6 = CB = Custom Binary     - custom binary file so replace not allowed
+        }
+        if ((-l $file1) && (!-l $file2)) { $state = $state7; $vstate = $vstate7; }  #  7 = LF = Link to File      - replace not allowed, merge
+        if ((!-l $file1) && (-l $file2)) { $state = $state8; $vstate = $vstate8; }  #  8 = FL = File to Link      - replace not allowed, investigate
+        if ((-l $file1) && (-l $file2)) { $state = $state9; $vstate = $vstate9; }   #  9 = LL = Link to Link      - replace not allowed, investigate
+    } else {
+        $state = $state0; $vstate = $vstate0;                                       #  0 = ?? = No index found    -> no index checksum-index found
+    }
+    if ($opt_d >= 1) { print "$tab"."  State of the current file : $vstate\n"; }
+    if (-e $file4) {
+        $ancestor_found = "true";
+    } else {
+        $ancestor_found = "false";
+    }
+    if ($opt_d >= 1) { print "$tab"."  Ancestor file available   : $ancestor_found\n"; }
+    if (-f "$file5") {
+        local $ENV{LC_ALL}="C";
+        if (`grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" "$file5" $debug`) {
+            $merge_conflict = "true";
+        } else {
+            $merge_conflict = "false";
+        }
+    } else {
+        $merge_conflict = "false";
+    }
+    if ($opt_d >= 1) { print "$tab"."  Merge conflict detected   : $merge_conflict\n"; }
+    if (-x $file1) {
+        $executable = "yes";
+    } else {
+        $executable = "no";
+    }
+    if ($opt_d >= 1) { print "$tab"."  Executable file           : $executable\n"; }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</determine_state>\n"; }
+}
+
+sub list_updates{ #RUNMODE# -l, --list
+    if ($opt_d >= 1) { print "$tab"."<list_updates>\n"; $tab = $tab."    "; }
+    print "$tab"."Searching for updates...\n";
+    &find_updates;
+    if (@list == 0) {
+        if ($opt_d >= 1) {
+            print "$tab"."No ._cfg0000_* files found...\n"; $tab =~ s/    //; print "$tab"."</list_updates>\n";
+            exit;
+        } else {
+            print "$tab"."No ._cfg0000_* files found...\n";
+            exit;
+        }
+    }
+    $num = 0;
+    for (my $i = 0; $i < @list; ++$i) {
+        &prepare_filenames_for_updating($list[$i]);
+        &determine_state;
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state3$|^$state4$/)) {
+            push(@stage1_queue, $list[$i]);
+            $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
+            if ($opt_v >= 1) { print "$tab"."Stage[1]  "; }
+            print "$tab"."$vstate  $list[$i]\n";
+        } else {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+                push(@stage2_queue, $list[$i]);
+                $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
+                if ($opt_v >= 1) { print "$tab"."Stage[2]  "; }
+                print "$tab"."$vstate  $list[$i]\n";
+            } else {
+                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true")) {
+                    push(@stage3_queue, $list[$i]);
+                    $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
+                    if ($opt_v >= 1) { print "$tab"."Stage[3]  "; }
+                    print "$tab"."$vstate  $list[$i]\n";
+                } else {
+                    if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$|^$state5$/)) {
+                        push(@stage4_queue, $list[$i]);
+                        $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
+                        if ($opt_v >= 1) { print "$tab"."Stage[4]  "; }
+                        print "$tab"."$vstate  $list[$i]\n";
+                    } else {
+                        if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (($state =~ /^$state2$|^$state4$|^$state6$|^$state7$|^$state8$|^$state9$/) || (!-e $file1))) {
+                            push(@stage5_queue, $list[$i]);
+                            $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
+                            if ($opt_v >= 1) { print "$tab"."Stage[5]  "; }
+                            print "$tab"."$vstate  $list[$i]\n";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</list_updates>\n"; }
+}
+
+sub update_files{ #RUNMODE# -u, --update
+    if ($opt_d >= 1) { print "$tab"."<update_files>\n"; $tab = $tab."    "; }
+    print "$tab"."Searching for updates...\n\n";
+    &find_updates;
+    if (@list == 0) { if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_files>\n"; } print "$tab"."\n"; &done; }
+    $totalcount = @list;
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print BOLD BLUE "$tab"."<< Scheduler >> queueing automatic updates...\n\n"; }
+    &schedule_automatic_updates;
+    $num = 0;
+    if ($opt_m >= 1) {
+        print BOLD BLUE "$tab"."<< Stage1 >> disabled with -m or --manual-only flag, skipping...\n\n";
+        print BOLD BLUE "$tab"."<< Stage2 >> disabled with -m or --manual-only flag, skipping...\n\n";
+    } else {
+        if ($opt_p >= 1) { &update_stage1("pretend"); } else { &update_stage1("execute"); }
+        if ($opt_p >= 1) { &update_stage2("pretend"); } else { &update_stage2("execute"); }
+    }
+    if ($opt_a >= 1) {
+        print BOLD BLUE "$tab"."<< Stage3 >> disabled with -a or --automatic-only flag, skipping...\n\n";
+        print BOLD BLUE "$tab"."<< Stage4 >> disabled with -a or --automatic-only flag, skipping...\n\n";
+        print BOLD BLUE "$tab"."<< Stage5 >> disabled with -a or --automatic-only flag, skipping...\n\n";
+    } else {
+        splice(@list);
+        splice(@stage1_queue);
+        splice(@stage2_queue);
+        splice(@stage3_queue);
+        splice(@stage4_queue);
+        splice(@stage5_queue);
+        &find_updates;
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print BOLD BLUE "$tab"."<< Scheduler >> queueing manual updates, including canceled automatic updates...\n\n"; }
+        &schedule_manual_updates;
+        my $recount = @list;
+        $num = ($totalcount - $recount);
+        if ($opt_p >= 1) { &update_stage3("pretend"); } else { &update_stage3("execute"); }
+        if ($opt_p >= 1) { &update_stage4("pretend"); } else { &update_stage4("execute"); }
+        if ($opt_p >= 1) { &update_stage5("pretend"); } else { &update_stage5("execute"); }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_files>\n"; }
+    &done;
+}
+
+sub schedule_automatic_updates{
+    if ($opt_d >= 1) { print "$tab"."<schedule_automatic_updates>\n"; $tab = $tab."    "; }
+    for (my $i = 0; $i < @list; ++$i) {
+        &prepare_filenames_for_updating($list[$i]);
+        &determine_state;
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state3$|^$state4$/)) {
+            push(@stage1_queue, $list[$i]);
+        } else {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+                push(@stage2_queue, $list[$i]);
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</schedule_automatic_updates>\n"; }
+}
+
+sub schedule_manual_updates{
+    if ($opt_d >= 1) { print "$tab"."<schedule_manual_updates>\n"; $tab = $tab."    "; }
+    for (my $i = 0; $i < @list; ++$i) {
+        &prepare_filenames_for_updating($list[$i]);
+        &determine_state;
+        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true")) {
+            push(@stage3_queue, $list[$i]);
+        } else {
+            if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$|^$state5$/)) {
+                push(@stage4_queue, $list[$i]);
+            } else {
+                if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (($state =~ /^$state2$|^$state4$|^$state6$|^$state7$|^$state8$|^$state9$/) || (!-e $file1))) {
+                    push(@stage5_queue, $list[$i]);
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</schedule_manual_updates>\n"; }
+}
+
+sub make_temp_backups{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<make_temp_backups>\n"; $tab = $tab."    "; }
+    if ($enable_backups =~ /^yes$|^true$|^on$/i) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file1\" \"$file6\"\n"; }
+        if ($_[0] =~ /execute/) {
+            $path = dirname($file6);
+            if (!-d $path) {
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  mkdir -p \"$path\"\n"; }
+                `mkdir -p "$path"`;
+            }
+            `cp -pP "$file1" "$file6" $debug`;
+        }
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file2\" \"$file7\"\n"; }
+        if ($_[0] =~ /execute/) {
+            $path = dirname($file7);
+            if (!-d $path) {
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  mkdir -p \"$path\"\n"; }
+                `mkdir -p "$path"`;
+            }
+            `cp -pP "$file2" "$file7" $debug`;
+         }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
+}
+
+sub update_stage1{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_stage1>\n"; $tab = $tab."    "; }
+    if  ($enable_stage1 !~ /^yes$|^true$|^on$/i) {
+        print BOLD BLUE "$tab"."<< Stage1 >> disabled in $settings, skipping...\n\n";
+    } elsif (!-e $index_file) {
+        print BOLD BLUE "$tab"."<< Stage1 >> $index_file not found, skipping...\n\n";
+    } elsif (@stage1_queue == 0) {
+        print BOLD BLUE "$tab"."<< Stage1 >> ".@stage1_queue." files in queue for automatic replacing, skipping...\n\n";
+    } else {
+        print BOLD BLUE "$tab"."<< Stage1 >> ".@stage1_queue." files in queue for automatic replacing, starting...\n\n";
+        $threeway_update = "no";
+        for (my $i = 0; $i < @stage1_queue; ++$i) {
+            &prepare_filenames_for_updating($stage1_queue[$i]);
+            &determine_state;
+            $num++;
+            &make_temp_backups;
+            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            if (!-e $file1) {
+                print "$tab"."* $file1 not found, cannot update...\n";
+                &update_canceled($_[0]);   # call subroutine with first ARG: "pretend" or "execute"
+                if (!-e $file2) {
+                    print "$tab"."* $file2 not found, cannot update...\n";
+                    &update_canceled($_[0]);   # call subroutine with first ARG: "pretend" or "execute"
+                }
+            } else {
+                if ($opt_p >= 1) {
+                    &update_canceled($_[0]);
+                } else {
+                    print "$tab"."  This file has not been changed and does not contain custom settings.\n";
+                    &update_replace_complete($_[0]);
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage1>\n"; }
+}
+
+sub update_stage2{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_stage2>\n"; $tab = $tab."    "; }
+    if ($enable_stage2 !~ /^yes$|^true$|^on$/i) {
+        print BOLD BLUE "$tab"."<< Stage2 >> disabled in $settings, skipping...\n\n";
+    } elsif (!-e "/usr/bin/diff3") {
+        print BOLD BLUE "$tab"."<< Stage2 >> /usr/bin/diff3 not found, skipping...\n\n";
+    } elsif (@stage2_queue == 0) {
+        print BOLD BLUE "$tab"."<< Stage2 >> ".@stage2_queue." files in queue for automatic 3-way merging, skipping...\n\n";
+    } else {
+        print BOLD BLUE "$tab"."<< Stage2 >> ".@stage2_queue." files in queue for automatic 3-way merging, starting...\n\n";
+        $threeway_update = "yes";
+        for (my $i = 0; $i < @stage2_queue; ++$i) {
+            &prepare_filenames_for_updating($stage2_queue[$i]);
+            &determine_state;
+            $num++;
+            &make_temp_backups;
+            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            if (!-e $file2) {
+                print "$tab"."* $file2 not found, cannot update...\n";
+                &update_canceled($_[0]);
+            } elsif (!-e $file1) {
+                print "$tab"."* $file1 not found, cannot update...\n";
+                &update_canceled($_[0]);
+            } else {
+                &launch_tool($_[0],"/usr/bin/diff3");
+                if (-e $file5) {
+                    if ($opt_d >= 1) { print "$tab"."  grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" $file5 $debug\n"; }
+                    local $ENV{LC_ALL}="C";
+                    if (!`grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" "$file5" $debug`) {  #  this string is double escaped due to perl handling... original string:    grep "^<<<<<<< \|^||||||\|^>>>>>>> \|^=======$"
+                        &update_merge_complete($_[0]);
+                    } else {
+                        &update_merge_conflict($_[0]);
+                    }
+                } else {
+                    if (($opt_v >= 1) || ($opt_d >=1)) { print "$tab"."  $file5 not found...\n"; }
+                    &update_canceled($_[0]);
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage2>\n"; }
+}
+
+sub update_stage3{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_stage3>\n"; $tab = $tab."    "; }
+    if ($tool_supports_3way =~ "no") {
+        print BOLD BLUE "$tab"."<< Stage3 >> $merge_tool_name does not support 3-way merging, skipping...\n\n";
+        for (my $i = 0; $i < @stage3_queue; ++$i) { push(@stage4_queue, $stage3_queue[$i]); }  # passing files in stage3 queue to stage4 queue
+    } elsif ($enable_stage3 !~ /^yes$|^true$|^on$/i) {
+        print BOLD BLUE "$tab"."<< Stage3 >> disabled in $settings, skipping...\n\n";
+        for (my $i = 0; $i < @stage3_queue; ++$i) { push(@stage4_queue, $stage3_queue[$i]); }  # passing files in stage3 queue to stage4 queue
+    } elsif (@stage3_queue == 0) {
+        print BOLD BLUE "$tab"."<< Stage3 >> ".@stage3_queue." files in queue for manual 3-way merging, skipping...\n\n";
+    } else {
+        print BOLD BLUE "$tab"."<< Stage3 >> ".@stage3_queue." files in queue for manual 3-way merging, starting...\n\n";
+        $threeway_update = "yes";
+        for (my $i = 0; $i < @stage3_queue; ++$i) {
+            &prepare_filenames_for_updating($stage3_queue[$i]);
+            &determine_state;
+            $num++;
+            &make_temp_backups;
+            &md5sum("$file1"); $md5sum_before = $md5sum;
+            &md5sum("$file2"); $md5sum_update = $md5sum;
+            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            &show_warning;
+            if (!-e $file2) {
+                print "$tab"."* $file2 not found, cannot update...\n";
+                &update_canceled($_[0]);
+            } elsif (!-e $file1) {
+                print "$tab"."* WARNING: $file1 not found...\n";
+                print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
+                print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
+                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                print "$tab"."  How do you want to finish this update? [1|2|s|q] ";
+                $key = "";
+                until ($key =~ /1|2|s|q/) {
+                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                    if ($key =~ /1/) { &update_replace_complete($_[0]); }
+                    if ($key =~ /2/) { &update_keep_complete($_[0]); }
+                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; } &done; }
+                    if ($key !~ /1|2|s|q/) { print "* invalid key... try again: " }
+                }
+            } else {
+                if ($merge_tool_name =~ /^diff$/) {
+                    print "$tab"."  Press [v] - to view differences between the current file and the ._cfg0000_* file\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  View differences between the current and update file? [v|s|q] ";
+                } else {
+                    print "$tab"."  Press [y] - to merge the current file and the ._cfg0000_* file with $merge_tool_name\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  Merge manually with file : $file2 ? [y|s|q] ";
+                }
+                $key = "";
+                until ($key =~ /y|s|q/) {
+                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; } &done; }
+                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                    if ($key =~ /v|y/) {
+                        &tool_intro($merge_tool_name);
+                        &launch_tool($_[0],$merge_tool);
+                        if (-e $file5) {
+                            if ($tool_saves_mergefile_when_aborted =~ "no") {
+                                print "$tab"."  Interactive merging completed... (or aborted)\n";
+                                print "$tab"."  Press [1] - to replace the current file with the merged result\n";
+                                print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                                print "$tab"."  Press [u] - to undo and re-try merging the files later\n";
+                                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                                print "$tab"."  Do you want to complete this update? [1|2|u|s|q] ";
+                                $key = "";
+                                until ($key =~ /1|2|u|s|q/) {
+                                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "n"; print "n\n"; }
+                                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; } &done; }
+                                    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
+                                    if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
+                                    if ($key =~ /u/) { &update_retry($_[0]); $i--; $num--; $key="s"; }
+                                    if ($key !~ /1|2|u|s|q/) { print "* invalid key... try again: " }
+                                }
+                            } else {
+                                if ($opt_d >= 1) { print "$tab"."  grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" $file5 $debug\n"; }
+                                local $ENV{LC_ALL}="C";
+                                if (!`grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" "$file5" $debug`) {  #  this string is double escaped due to perl handling... original string:    grep "^<<<<<<< \|^||||||\|^>>>>>>> \|^=======$"
+                                    &update_merge_complete($_[0]);
+                                } else {
+                                    &update_canceled($_[0]);   # this happends when stage2 leaves a .merge file with a merge-conflict in it and you cancel the manual update in stage3 too
+                                }
+                            }
+                        } else {
+                            print "$tab"."  Merged result file $file5 not found...\n";
+                            &md5sum("$file1"); $md5sum_after = $md5sum;
+                            if ($md5sum_before =~ $md5sum_after) {
+                                print "$tab"."  No changes detected...\n";
+                                print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
+                                print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                                print "$tab"."  Press [u] - to undo and re-try merging the files later\n";
+                                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                                print "$tab"."  How do you want to finish this update? [1|2|u|s|q] ";
+                                $key = "";
+                                until ($key =~ /1|2|u|s|q/) {
+                                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; } &done; }
+                                    if ($key =~ /1/) { &update_replace_complete($_[0]); $key="s"; }
+                                    if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
+                                    if ($key =~ /u/) { &update_retry($_[0]); $i--; $num--; $key="s"; }
+                                    if ($key !~ /1|2|u|s|q/) { print "* invalid key... try again: " }
+                                }
+                            } else {
+                                print "$tab"."  Merged result has been saved in $file1\n";
+                                &update_keep_complete($_[0]);
+                            }
+                        }
+                    }
+                    if ($key !~ /y|s|q/) { print "* invalid key... try again: " }
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; }
+}
+
+sub update_stage4{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_stage4>\n"; $tab = $tab."    "; }
+    if  ($enable_stage4 !~ /^yes$|^true$|^on$/i) {
+        print BOLD BLUE "$tab"."<< Stage4 >> disabled in $settings, skipping...\n\n";
+    } elsif (@stage4_queue == 0) {
+        print BOLD BLUE "$tab"."<< Stage4 >> ".@stage4_queue." files in queue for manual 2-way merging, skipping...\n\n";
+    } else {
+        print BOLD BLUE "$tab"."<< Stage4 >> ".@stage4_queue." files in queue for manual 2-way merging, starting...\n\n";
+        if ($merge_tool_name =~ /^diff3$/) { print "$tab"."* diff3 cannot be used for this stage, changing to sdiff\n\n"; $merge_tool = "/usr/bin/sdiff"; }
+        $threeway_update = "no";
+        for (my $i = 0; $i < @stage4_queue; ++$i) {
+            &prepare_filenames_for_updating($stage4_queue[$i]);
+            &determine_state;
+            $num++;
+            &make_temp_backups;
+            &md5sum("$file1"); $md5sum_before = $md5sum;
+            &md5sum("$file2"); $md5sum_update = $md5sum;
+            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            &show_warning;
+            if (!-e $file2) {
+                print "$tab"."* $file2 not found, cannot update...\n";
+                &update_canceled($_[0]);
+            } elsif (!-e $file1) {
+                print "$tab"."* WARNING: $file1 not found...\n";
+                print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
+                print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
+                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                print "$tab"."  How do you want to finish this update? [1|2|s|q] ";
+                $key = "";
+                until ($key =~ /1|2|s|q/) {
+                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                    if ($key =~ /1/) { &update_replace_complete($_[0]); }
+                    if ($key =~ /2/) { &update_keep_complete($_[0]); }
+                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
+                    if ($key !~ /1|2|s|q/) { print "* invalid key... try again: " }
+                }
+            } else {
+                if ($merge_tool_name =~ /^diff$/) {
+                    print "$tab"."  Press [v] - to view differences between the current and ._cfg0000_* file\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  View differences between the current and update file? [v|s|q] ";
+                } else {
+                    print "$tab"."  Press [y] - to merge the current file and the ._cfg0000_* file with $merge_tool_name\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  Merge manually with file : $file2 ? [y|s|q] ";
+                }
+                $key = "";
+                until ($key =~ /y|s|q/) {
+                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
+                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                    if ($key =~ /v|y/) {
+                        &tool_intro($merge_tool_name);
+                        if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; }
+                        &launch_tool($_[0],$merge_tool);
+                        if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; print "$tab"."  To scroll up and down use [Shift]+[PgUp] and [Shift]+[PgDn]\n"; }
+                        if (-e $file5) {
+                            if ($tool_saves_mergefile_when_aborted =~ "no") {
+                                print "$tab"."  Interactive merging completed... (or aborted)\n";
+                                print "$tab"."  Press [v] - to view the merged result (to check if merging was successful)\n";
+                                print "$tab"."  Press [1] - to replace the current file with the merged result\n";
+                                print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                                print "$tab"."  Press [u] - to undo and re-try merging the files later\n";
+                                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                                print "$tab"."  Do you want to complete this update? [v|1|2|u|s|q] ";
+                                $key = "";
+                                until ($key =~ /1|2|u|s|q/) {
+                                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "n"; print "n\n"; }
+                                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
+                                    if ($key =~ /v/) {
+                                        print "--------------------------------------------------------------------------------\n";
+                                        print "$tab"."  $view_tool $file5\n";
+                                        print "$tab"."  TIP: you can change the viewer to an editor in $settings\n";
+                                        print "$tab"."       VIEW_TOOL = \"nano -w\" or VIEW_TOOL = \"vi\"\n";
+                                        system("$view_tool $file5");
+                                        print "--------------------------------------------------------------------------------\n";
+                                        print "$tab"."  Press [v] - to view the merged result (to check if merging was successful)\n";
+                                        print "$tab"."  Press [1] - to replace the current file with the merged result\n";
+                                        print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                                        print "$tab"."  Press [u] - to undo and re-try merging the files later\n";
+                                        print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                                        print "$tab"."  Press [q] - to quit $progname immediately\n";
+                                        print "$tab"."  Do you want to complete this update? [v|1|2|u|s|q] ";
+                                    }
+                                    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
+                                    if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
+                                    if ($key =~ /u/) { &update_retry($_[0]); $i--; $num--; $key="s"; }
+                                    if ($key !~ /v|1|2|u|s|q/) { print "* invalid key... try again: " }
+                                }
+                            } else {
+                                &update_merge_complete($_[0]);
+                            }
+                        } else {
+                            print "$tab"."  $file5 not found...\n";
+                            &md5sum("$file1"); $md5sum_after = $md5sum;
+                            if ($md5sum_before =~ $md5sum_after) {
+                                print "$tab"."  No changes detected...\n";
+                                print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
+                                print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                                print "$tab"."  Press [u] - to undo and re-try merging the files later\n";
+                                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                                print "$tab"."  How do you want to finish this update? [1|2|u|s|q] ";
+                                $key = "";
+                                until ($key =~ /1|2|u|s|q/) {
+                                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
+                                    if ($key =~ /1/) { &update_replace_complete($_[0]); $key="s"; }
+                                    if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
+                                    if ($key =~ /u/) { &update_retry($_[0]); $i--; $num--; $key="s"; }
+                                    if ($key !~ /1|2|u|s|q/) { print "* invalid key... try again: " }
+                                }
+                            } else {
+                                print "$tab"."  Merged result has been saved in $file1\n";
+                                &update_keep_complete($_[0]);
+                            }
+                        }
+                    }
+                    if ($key !~ /y|s|q/) { print "* invalid key... try again: " }
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; }
+}
+
+sub update_stage5{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_stage5>\n"; $tab = $tab."    "; }
+    if  ($enable_stage5 !~ /^yes$|^true$|^on$/i) {
+        print BOLD BLUE "$tab"."<< Stage5 >> disabled in $settings, skipping...\n\n";
+    } elsif (@stage5_queue == 0) {
+        print BOLD BLUE "$tab"."<< Stage5 >> ".@stage5_queue." files in queue for manual updating, skipping...\n\n";
+    } else {
+        print BOLD BLUE "$tab"."<< Stage5 >> ".@stage5_queue." files in queue for manual updating, starting...\n\n";
+        $threeway_update = "no";
+        for (my $i = 0; $i < @stage5_queue; ++$i) {
+            &prepare_filenames_for_updating($stage5_queue[$i]);
+            &determine_state;
+            $num++;
+            &make_temp_backups;
+            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            &show_warning;
+            if (!-e $file2) {
+                print "$tab"."* $file2 not found, cannot update...\n";
+                &update_canceled($_[0]);
+            } elsif (!-e $file1) {
+                print "$tab"."* WARNING: $file1 not found...\n";
+                print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
+                print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
+                print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                print "$tab"."  Press [q] - to quit $progname immediately\n";
+                print "$tab"."  How do you want to finish this update? [1|2|s|q] ";
+                $key = "";
+                until ($key =~ /1|2|s|q/) {
+                    if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                    if ($key =~ /1/) { &update_replace_complete($_[0]); }
+                    if ($key =~ /2/) { &update_keep_complete($_[0]); }
+                    if ($key =~ /s/) { &update_canceled($_[0]); }
+                    if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage5>\n"; } &done; }
+                    if ($key !~ /1|2|s|q/) { print "* invalid key... try again: " }
+                }
+            } else {
+                if (!-B "$file1") {
+                    print "$tab"."  This update cannot be done with the diff/merge tool...\n";
+                    print "$tab"."  Press [v] - to view the differences with diff\n";
+                    print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  How do you want to finish this update? [v|1|2|s|q] ";
+                    $key = "";
+                    until ($key =~ /1|2|s|q/) {
+                        if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                        if ($key =~ /v/) {
+                            print "--------------------------------------------------------------------------------\n";
+                            &launch_tool($_[0],"/usr/bin/diff");
+                            print "--------------------------------------------------------------------------------\n";
+                            print "$tab"."  Press [v] - to view the differences with diff\n";
+                            print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
+                            print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                            print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                            print "$tab"."  Press [q] - to quit $progname immediately\n";
+                            print "$tab"."  How do you want to finish this update? [v|1|2|s|q] ";
+                        }
+                        if ($key =~ /1/) { &update_replace_complete($_[0]); }
+                        if ($key =~ /2/) { &update_keep_complete($_[0]); }
+                        if ($key =~ /s/) { &update_canceled($_[0]); }
+                        if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage5>\n"; } &done; }
+                        if ($key !~ /v|1|2|s|q/) { print "* invalid key... try again: " }
+                    }
+                } else {
+                    print "$tab"."  This update cannot be done with the diff/merge tool...\n";
+                    print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
+                    print "$tab"."  Press [q] - to quit $progname immediately\n";
+                    print "$tab"."  How do you want to finish this update? [1|2|s|q] ";
+                    $key = "";
+                    until ($key =~ /1|2|s|q/) {
+                        if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
+                        if ($key =~ /1/) { &update_replace_complete($_[0]); }
+                        if ($key =~ /2/) { &update_keep_complete($_[0]); }
+                        if ($key =~ /s/) { &update_canceled($_[0]); }
+                        if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage5>\n"; } &done; }
+                        if ($key !~ /1|2|s|q/) { print "* invalid key... try again: " }
+                    }
+                }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage5>\n"; }
+}
+
+sub update_retry{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_retry>\n"; $tab = $tab."    "; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    if ($_[0] =~ /pretend/) {
+        print BOLD GREEN "$tab"."Skipping update...";
+        print " (-p, --pretend flag found)\n\n";
+    } else {
+        print BOLD RED "$tab"."Update canceled for retry...\n\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_retry>\n"; }
+}
+
+sub update_canceled{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_canceled>\n"; $tab = $tab."    "; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    if ($_[0] =~ /pretend/) {
+        print BOLD GREEN "$tab"."Skipping update...";
+        print " (-p, --pretend flag found)\n\n";
+    } else {
+        print BOLD RED "$tab"."Update canceled...\n\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_canceled>\n"; }
+}
+
+sub update_merge_conflict{ #ARGS# ("pretend|execute")
+    if ($opt_d >= 1) { print "$tab"."<update_merge_conflict>\n"; $tab = $tab."    "; }
+    print "$tab"."* Merge conflict(s) found, this file will be re-scheduled for manual updating.\n";
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    print BOLD RED "$tab"."Update canceled...\n\n";
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_merge_conflict>\n"; }
+}
+
+sub update_merge_complete{ #ARGS# ("pretend|execute")
+    # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
+    if ($opt_d >= 1) { print "$tab"."<update_merge_complete>\n"; $tab = $tab."    "; }
+#    print "$tab"."  Replacing current config file with $file5\n";
+    print "$tab"."  Replacing it with $file5\n";
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file5\" \"$file1\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file5" "$file1" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file7\" \"$file4\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file7" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    print BOLD GREEN "$tab"."Update complete...\n\n";
+#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
+#    print "$tab"."$merge_action\n";
+#    push(@merge_history, $merge_action);
+#    `echo $merge_action >> $log_file`;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_merge_complete>\n"; }
+}
+
+sub update_replace_complete{ #ARGS# ("pretend|execute")
+    # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
+    if ($opt_d >= 1) { print "$tab"."<update_replace_complete>\n"; $tab = $tab."    "; }
+#    print "$tab"."  Replacing current config file with $file2\n";
+    print "$tab"."  Replacing it with $file2\n";
+    if (-l $file1) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
+        if ($_[0] =~ /execute/) { `rm -f "$file1" $debug`; } # remove original file first if it's a symlink, otherwise the contents of new file is copied into link target!
+    }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file2\" \"$file1\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file2" "$file1" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file7\" \"$file4\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file7" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\" (should not exist!)\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    print BOLD GREEN "$tab"."Update complete...\n\n";
+#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
+#    print "$tab"."$merge_action\n";
+#    push(@merge_history, $merge_action);
+#    `echo $merge_action >> $log_file`;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_replace_complete>\n"; }
+}
+
+sub update_keep_complete{ #ARGS# ("pretend|execute")
+    # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
+    if ($opt_d >= 1) { print "$tab"."<update_keep_complete>\n"; $tab = $tab."    "; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file7\" \"$file4\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$file7" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file7\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file7" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\" (should not exist)\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    print BOLD GREEN "$tab"."Update complete...\n\n";
+#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
+#    print "$tab"."$merge_action\n";
+#    push(@merge_history, $merge_action);
+#    `echo $merge_action >> $log_file`;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_keep_complete>\n"; }
+}
+
+sub done{
+    if ($opt_d >= 1) { print "$tab"."<done>\n"; $tab = $tab."    "; }
+    &find_updates;
+    $totalcount = @list;
+    if (@list == 0) {
+        print "$tab"."All files have been updated...\n\n";
+    } else {
+        if ($opt_p == 0) {
+            print @list." updates remaining, run cfg-update again until all files are updated!\n\n";
+        } else {
+            print @list." updates remaining, run cfg-update -u to update your files...\n\n";
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</done>\n"; }
+    exit;
+}
+
+sub find_backups{
+    if ($opt_d >= 1) { print "$tab"."<find_backups>\n"; $tab = $tab."    "; }
+    &find_protected_dirs;
+    @list = ();
+    for (my $i = $mount_first; $i <= $mount_last; $i++) {
+        if ($mount_point[$i]) { $host_path = $mount_point[$i]; } else { $host_path = ""; }
+        for (my $i = 0; $i < @dir; ++$i) {
+            if ($opt_d >= 1) { print "$tab"."  find $host_path$backup_path$dir[$i] -name '$backup_old' $debug\n"; }
+            push(@list, `find $host_path$backup_path$dir[$i] -name '$backup_old' $debug`);
+        }
+    }
+    chomp @list;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_backups>\n"; }
+}
+
+sub prepare_filenames_for_restoring{ #ARGS# ("file")
+    if ($opt_d >= 1) { print "$tab"."<prepare_filenames_for_restoring>\n"; $tab = $tab."    "; }
+    $_ = dirname($_[0]);
+    if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
+        $host_path = $`;                           # put string in front of // into host_path
+        $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
+        $path = $';                                # put string behind // into path
+        $path = "/".$path."/";                     # re-add / in front and add / to end of path
+        $path =~ s/$backup_path//;                 # strip the backup_path from the path
+        $file = basename($_[0]);
+    } else {                                       # if // is not found make host_path empty
+        $host_path = "";
+        $path = dirname($_[0]);
+        $path =~ s/$backup_path//;                 # strip the backup_path from the path
+        $path = $path."/";                         # re-add / to end of path
+        $file = basename($_[0]);
+    }
+    $file =~ s/$rm_old//;                          # strips ._old-cfg_ from filename
+    $file1 = $restore_old;
+    $file1 =~ s/\*/$file/;
+    $file1 = $host_path.$path.$file1;              # contains /host_path//path/filename
+    $file2 = $restore_new;
+    $file2 =~ s/\*/$file/;
+    $file2 = $host_path.$path.$file2;              # contains /host_path/path/._cfg0000_filename
+    if (-e $file2) { $file2 =~ s/0000/----/; }     # or       /host_path/path/._cfg----_filename if a newer update is found
+    $file3 = $backup_old;
+    $file3 =~ s/\*/$file/;
+    $file3 = $host_path.$backup_path.$path.$file3; # contains /host_path//backup_path/path/._old-cfg_filename
+    $file4 = $backup_new;
+    $file4 =~ s/\*/$file/;
+    $file4 = $host_path.$backup_path.$path.$file4; # contains /host_path//backup_path/path/._new-cfg_filename
+    $file5 = $merged;
+    $file5 =~ s/\*/$file/;
+    $file5 = $host_path.$path.$file5;              # contains /host_path//path/filename.merge
+    $file6 = "undefined-filename";
+    $file7 = "undefined-filename";
+    if ($opt_d >= 1) {
+        print "$tab"."  host_path   = $host_path\n";
+        print "$tab"."  backup_path = $backup_path\n";
+        print "$tab"."  path        = $path\n";
+        print "$tab"."  file1       = $file1\n";
+        print "$tab"."  file2       = $file2\n";
+        print "$tab"."  file3       = $file3\n";
+        print "$tab"."  file4       = $file4\n";
+        print "$tab"."  file5       = $file5\n";
+        print "$tab"."  file6       = $file6\n";
+        print "$tab"."  file7       = $file7\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</prepare_filenames_for_restoring>\n"; }
+}
+
+sub list_backups{ #RUNMODE# -b, --backup
+    if ($opt_d >= 1) { print "$tab"."<list_backups>\n"; $tab = $tab."    "; }
+    print "$tab"."Searching for backups...\n";
+    &find_backups;
+    if (@list == 0) { print "$tab"."No ($backup_old) files found...\n"; }
+    for (my $i = 0; $i < @list; ++$i) {
+        &prepare_filenames_for_restoring($list[$i]);
+        $num = $i+1;
+        if ($num < 1000) { $num = "$num "; }
+        if ($num < 100)  { $num = "$num "; }
+        if ($num < 10)   { $num = "$num "; }
+        if ($opt_v == 0)  {
+            my $date = `ls --full-time "$file3" | awk '{print \$6}' $debug`;
+            chomp $date;
+            print "$tab"."$num  $date  $file1\n";
+        }
+        if (($opt_v >= 1) || ($opt_d >= 1)) {
+            print "$tab"."\n";
+            &md5sum("$file3");
+            print "$tab"."$num restore $md5sum $file3\n";
+            &md5sum("$file1");
+            print "$tab"."$num to      $md5sum $file1\n";
+            &md5sum("$file4");
+            print "$tab"."$num restore $md5sum $file4\n";
+            print "$tab"."$num to      $md5sum $file2\n";
+        }
+    }
+    print "\n";
+    print "$tab"."TIP: You can use grep to filter this list on date/dirname/filename:\n";
+    print "$tab"."     cfg-update -b | grep \"2005-08\"\n";
+    print "$tab"."     cfg-update -b | grep \"/etc/conf.d\"\n";
+    print "$tab"."     cfg-update -b | grep \"inittab\"\n";
+    print "\n";
+    print "$tab"."     Just take the number of the file that you want to restore and\n";
+    print "$tab"."     use it in conjunction with the -r, --restore option:\n";
+    print "$tab"."     cfg-update -r 77\n";
+    print "\n";
+    print "$tab"."     Then simply retry updating the restored file with:\n";
+    print "$tab"."     cfg-update -m -u\n";
+    print "\n";
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</list_backups>\n"; }
+}
+
+sub restore_backups{ #RUNMODE# -r, --restore
+    if ($opt_d >= 1) { print "$tab"."<restore_backups>\n"; $tab = $tab."    "; }
+    if ($opt_p >= 1) { print "$tab"."-p, --pretend not supported for restoring backups!\n"; exit; }
+    print "$tab"."Searching for backups...\n";
+    &find_backups;
+    print "$tab"."\n";
+    if (@list == 0) { print "$tab"."No ($backup_old) files found...\n\n"; }
+    $totalcount = @list;
+    for (my $i = 0; $i < @list; $i++) {
+        if ($opt_r != 0) { $i = $opt_r-1; }     # take -r argument [number] => single-file-restore-mode
+        &prepare_filenames_for_restoring($list[$i]);
+        $num = $i + 1;
+        print "$tab"."($num/$totalcount)\n";
+        print "$tab"."  $file1\n";
+        print "$tab"."  $file2\n";
+        if ($opt_v >= 1) {
+            print "$tab"."  [y]es       restore the backup of the old and new config file\n";
+            print "$tab"."  [n]o        skip this file and go to the next backup file\n";
+            print "$tab"."  [q]uit      quit immediately\n";
+        }
+        print "$tab"."  Restore files ? [y|n|q|?] ";
+        $key = " ";
+        until ($key =~ /y|n/) {
+            &readkey;
+            if ($key =~ /q/) {
+                print BOLD RED "$tab"."Restore canceled...\n";
+                print "\n";
+                exit;
+            }
+            if ($key =~ /n/) {
+                print BOLD RED "$tab"."Restore canceled...\n";
+                print "\n";
+            }
+            if ($key =~ /\?/) {
+                print "$tab"."  [y]es       restore the backup of the old and new config file\n";
+                print "$tab"."  [n]o        skip this file and go to the next backup file\n";
+                print "$tab"."  [q]uit      quit immediately\n";
+                print "$tab"."  Restore files ? [y|n|q|?] ";
+            }
+            if ($key =~ /y/) {
+                # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
+                print "$tab"."  Restoring both the original and update file so you can retry updating...\n";
+                if (-l $file1) {
+                    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
+                    `rm -f "$file1" $debug`; # remove original file if it's a symlink
+                }
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file3\" \"$file1\"\n"; }
+                `cp -pP "$file3" "$file1" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file3\"\n"; }
+                `rm -f "$file3" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file4\" \"$file2\"\n"; }
+                `cp -pP "$file4" "$file2" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file4\"\n"; }
+                `rm -f "$file4" $debug`;
+                print BOLD GREEN "$tab"."Restore complete...\n";
+                print "\n";
+            }
+            if ($key !~ /y|n|q|\?/) { print "* invalid key... try again: " }
+        }
+        if ($opt_r != 0) {        # exit when -n argument not 0 => single-file-rstore-mode
+            if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</restore_backups>\n"; }
+            exit;
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</restore_backups>\n"; }
+}
+
+sub move_backups{ #RUNMODE# --move-backups
+    if ($opt_d >= 1) { print "$tab"."<move_backups>\n"; $tab = $tab."    "; }
+# Move all existing ._old-cfg_* and ._new-cfg_* files to the backup_path (if backup_path is not empty)
+    if ($backup_path =~ /^$/) {
+        print "$tab"."   If you want to move your backups to a separate directory you should\n";
+        print "$tab"."   set the variable BACKUP_PATH in $settings\n";
+        print "$tab"."   $progname --move-backups will move your backups to this directory.\n";
+    } else {
+        &find_protected_dirs;
+        @list = ();
+        for (my $i = 0; $i < @mount_point; ++$i) {
+            $host_path = $mount_point[$i];
+            for (my $i = 0; $i < @dir; ++$i) {
+                if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*'me ' $debug | sort $debug\n"; }
+                push(@list, `find $host_path$dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug`);
+            }
+        }
+        chomp @list;
+        if (@list == 0) {
+            print "$tab"."   No backup files found in the protected directories...\n";
+            if ($enable_backups =~ /^yes$|^true$|^on$/i) {
+                print "$tab"."   Backups are currently being saved to $backup_path\n";
+            } else {
+                print "$tab"."   Backups are disabled in $settings\n";
+            }
+        } else {
+            $totalcount = @list;
+            for (my $i = 0; $i < @list; $i++) {
+                $num = $i + 1;
+                $_ = dirname($list[$i]);
+                if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
+                    $host_path = $`;                           # put string in front of // into host_path
+                    $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
+                    $path = $';                                # put string behind // into path
+                    $path = "/".$path."/";                     # re-add / in front and add / to end of path
+                    $file = basename($list[$i]);
+                } else {                                       # if // is not found make host_path empty
+                    $host_path = "";
+                    $path = dirname($list[$i]);
+                    $path = $path."/";                         # re-add / to end of path
+                    $file = basename($list[$i]);
+                }
+                $file1 = $host_path.$path.$file;               # contains /host_path/path/._new-cfg_filename
+                $file2 = $host_path.$backup_path.$path.$file;  # contains /host_path//backup_path/path/._new-cfg_filename
+                $path = dirname($file2);
+                my $percentage = int($num/$totalcount*100);
+                if (!-e "$path") {
+                    if ($opt_d >= 1) { print "$tab"."mkdir -p $path\n"; }
+                    `mkdir -p $path`;
+                }
+                if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                print "$tab"."$percentage% - Moving backup to $file2\n";
+                if ($opt_d >= 1) { print "$tab"."mv $file1 $file2\n"; }
+                `mv "$file1" "$file2"`;
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</move_backups>\n"; }
+}
+
+sub optimize_backups{ #RUNMODE# --optimize-backups
+    if ($opt_d >= 1) { print "$tab"."<optimize_backups>\n"; $tab = $tab."    "; }
+# Create fake backups of the previous ._cfg0000_ file to maximize chances for automatic updating
+    &find_protected_dirs;
+    @list = ();
+    for (my $i = 0; $i < @mount_point; ++$i) {
+        $host_path = $mount_point[$i];
+        for (my $i = 0; $i < @dir; ++$i) {
+            if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] $debug\n"; }
+            push(@list, `find $host_path$dir[$i] $debug`);
+        }
+    }
+    chomp @list;
+    if (@list == 0) { print "$tab"."No protected files found... you should check CONFIG_PROTECT!\n\n"; }
+    $totalcount = @list;
+    for (my $i = 0; $i < @list; $i++) {
+        $num = $i + 1;
+        $_ = dirname($list[$i]);
+        if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
+            $host_path = $`;                           # put string in front of // into host_path
+            $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
+            $path = $';                                # put string behind // into path
+            $path = "/".$path."/";                     # re-add / in front and add / to end of path
+            $file = basename($list[$i]);
+        } else {                                       # if // is not found make host_path empty
+            $host_path = "";
+            $path = dirname($list[$i]);
+            $path = $path."/";                         # re-add / to end of path
+            $file = basename($list[$i]);
+        }
+        $file1 = $host_path.$path.$file;                            # contains /host_path/path/filename
+        $file2 = $host_path.$backup_path.$path."._new-cfg_".$file;  # contains /host_path//backup_path/path/filename
+        $file4 = "";
+        $file5 = "";
+        &determine_state;
+        my $percentage = int($num/$totalcount*100);
+        if (-e "$file2") {
+                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                    print "$tab"."$percentage% - Skip file $file1\n";
+            if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (exists in repository)\n"; }
+        } else {
+            if (($state =~ $state3) || ($state =~ $state4)) {
+                $path = dirname($file2);
+                if (!-e "$path") {
+                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                    print "$tab"."$percentage% - Make dir  $path\n";
+                    if ($opt_d >= 1) { print "$tab"."mkdir -p $path\n"; }
+                    `mkdir -p $path`;
+                }
+                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                    print "$tab"."$percentage% - Make file $file2\n";
+                if ($opt_d >= 1) { print "$tab"."[$state] cp -p $file1 $file2\n"; }
+                `cp -p "$file1" "$file2"`;
+            } else {
+                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                    print "$tab"."$percentage% - Skip file $file1\n";
+                if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (not unmodified)\n"; }
+            }
+        }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</optimize_backups>\n"; }
+}
+
+sub disable_portage_hook { #RUNMODE# --disable-portage-hook
+    if ($opt_d >= 1) { print "$tab"."<disable_portage_hook>\n"; $tab = $tab."    "; }
+    if (-e "$portage_hook") {
+        local $ENV{LC_ALL}="C";
+        if (`grep '^.*cfg-update.*--index' $portage_hook` =~ /cfg-update/) {
+            local $ENV{LC_ALL}="C";
+            if (`grep '^#.*cfg-update.*--index' $portage_hook` =~ /cfg-update/) {
+                if ($opt_ebuild == 0) { print "$tab"."  Portage hook is already disabled...\n"; }
+            } else {
+                &root_only("Can't disable the Portage hook if you're not root...");
+                `perl -p -i -e 's/^if \\[ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" \\] && \\[ -e \\"\\/usr\\/bin\\/cfg-update\\" \\]; then cfg-update --index; fi/#if \\[ \\"\\\$EBUILD_PHASE\\" = \\"setup\\" \\] && \\[ -e \\"\\/usr\\/bin\\/cfg-update\\" \\]; then cfg-update --index; fi/;' $portage_hook`;
+                if ($opt_ebuild == 0) { print "$tab"."  Disabled Portage hook in $portage_hook...\n"; }
+            }
+        } else {
+            if ($opt_ebuild == 0) { print "$tab"."  No hook found in $portage_hook...\n"; }
+        }
+    } else {
+        if ($opt_ebuild == 0) { print "$tab"."  $portage_hook does not exist, no need to disable the alias...\n"; }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</disable_portage_hook>\n"; }
+}
+
+sub disable_paludis_hook { #RUNMODE# --disable-paludis-hook
+    if ($opt_d >= 1) { print "$tab"."<disable_paludis_hook>\n"; $tab = $tab."    "; }
+    if (-e "$paludis_hook") {
+        if ($opt_d >= 1) { print "$tab"."rm -rf $paludis_hook $debug\n"; }
+        `rm -rf $paludis_hook $debug`;
+        if ($opt_ebuild == 0) { print "$tab"."Paludis hook $paludis_hook\nDisabled...\n"; }
+    } else {
+        if ($opt_ebuild == 0) { print "$tab"."Paludis hook $paludis_hook\nDoes not exist, nothing to disable...\n"; }
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</disable_paludis_hook>\n"; }
+}
+
+sub diff_two_files { #RUNMODE# when the two arguments are both existing files
+    $file1 = $ARGV[0];                                                        # contains /etc/foo             (current)
+    $file2 = $ARGV[1];                                                        # contains /etc/._cfg0000_foo   (update)
+    $path = dirname($ARGV[0]);
+    $file = basename($ARGV[0]);
+    $file5 = $merged;
+    $file5 =~ s/\*/$file/;
+    $file5 = $path."/".$file5;                                             # contains /etc/foo.merge       (merged result)
+    $threeway_update = "no";
+    &launch_tool("execute",$merge_tool);
+    if (-s "$file5") { print "$tab"."Merged output has been saved as $file5\n"; }
+}
+
+sub diff_three_files { #RUNMODE# when the three arguments are all existing files
+    $file1 = $ARGV[0];                                                        # contains /etc/foo             (current)
+    $file4 = $ARGV[1];                                                        # contains /etc/._ancestor_foo  (ancestor)
+    $file2 = $ARGV[2];                                                        # contains /etc/._cfg0000_foo   (update)
+    $path = dirname($ARGV[0]);
+    $file = basename($ARGV[0]);
+    $file5 = $merged;
+    $file5 =~ s/\*/$file/;
+    $file5 = $path."/".$file5;                                             # contains /etc/foo.merge       (merged result)
+    $threeway_update = "yes";
+    &launch_tool("execute",$merge_tool);
+    if (-s "$file5") { print "$tab"."Merged output has been saved as $file5\n"; }
+}
+
+sub tool_intro{ #ARGS# ("mergetoolname")
+    if ($opt_d >= 1) { print "$tab"."<tool_intro>\n"; $tab = $tab."    "; }
+# 80 chars            ________________________________________________________________________________
+    if ($_[0] =~ /^diff$/) {
+        print "$tab"."  $_[0] can not be used for manual updating, it only displays differences.\n";
+        print "$tab"."  $_[0] can not show the differences between binary files.\n";
+        print "$tab"."  When $_[0] is done, $progname will automatically skip the update.\n";
+    } elsif ($_[0] =~ /^sdiff$/) {
+        print "$tab"."  In $_[0] you select differences from the left or the right file and when\n";
+        print "$tab"."  all differences are dealt with, $_[0] exits by itself and the result\n";
+        print "$tab"."  will be saved as $merged...\n";
+        print "$tab"."  Some usage tips for sdiff:\n";
+        print "$tab"."     press [enter] to view all merge/edit options\n";
+        print "$tab"."     press [l],[enter] to select the left line(s) from the current file\n";
+        print "$tab"."     press [r],[enter] to select the right line(s) from the new file\n";
+        print "$tab"."  When $_[0] is done, $progname will ask if you want to complete or cancel\n";
+        print "$tab"."  the update...\n";
+    } elsif ($_[0] =~ /^diff3$/) {
+        print "$tab"."  $_[0] will try to do a 3-way merge, if a merge-conflict is found $progname\n";
+        print "$tab"."  will cancel the update and re-schedule it for manual merging.\n";
+        print "$tab"."  If no merge-conflicts are found $progname will automatically\n";
+        print "$tab"."  complete the update for you...\n";
+    } elsif ($_[0] =~ /^xxdiff$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep by simply\n";
+        print "$tab"."  clicking on the colored lines. They will appear in the merge-pane.\n";
+        print "$tab"."  When done, click the M-button to save the result, then exit $_[0]!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update.\n";
+    } elsif ($_[0] =~ /^kdiff3$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, click the save button and exit $_[0]!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^kompare$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, save the merged result over the current config file by\n";
+        print "$tab"."  closing $_[0] and clicking the Save button in the popup window!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^vimdiff$/) {
+        print "$tab"."  In $_[0] you can only edit and save the left window (forced by $progname)\n";
+        print "$tab"."  so make all changes in the window on the left side!\n";
+        print "$tab"."     press [ctrl][w][w] to switch between left and right windows\n";
+        print "$tab"."     press [d][o] to obtain the diff from the right window (when in left window)\n";
+        print "$tab"."     press [d][p] to put the diff in the left window (when in right window)\n";
+        print "$tab"."     press [z][o] to unfold a piece of text without differences\n";
+        print "$tab"."     press [i] to go into edit mode (when in left window)\n";
+        print "$tab"."     press [esc] return to command mode (when in edit mode)\n";
+        print "$tab"."     press [:][q][a][!] to close $_[0] without saving\n";
+        print "$tab"."     press [:][w][q][a] to save changes and close $_[0]\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^meld$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, save the merged result over the current configfile by\n";
+        print "$tab"."  right-clicking on the left pane and chosing \"Save\"!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^tkdiff$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, save the merged result with the \"Save & Exit\" button!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^gtkdiff$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, save the merged result with menu: merge -> output file!\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } else {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, try saving the merged result as *.merge\n";
+        print "$tab"."  or save the merged result over the current config file.\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</tool_intro>\n"; }
+}
+
+sub show_warning{
+    if ($opt_d >= 1) { print "$tab"."<show_warning>\n"; $tab = $tab."    "; }
+# 80 chars            ________________________________________________________________________________
+    if ($state =~ /^$state0$/) {
+        print "$tab"."* YOU SHOULD CHOOSE [y] TO UPDATE MANUALLY! CFG-UPDATE CANNOT\n";
+        print "$tab"."* DETERMINE IF IT IS SAFE TO REPLACE THIS FILE WITH THE NEW VERSION.\n";
+    }
+    if ($state =~ /^$state1$/) {
+        print "$tab"."* YOU ARE ABOUT TO UPDATE A MODIFIED FILE WHICH PROBABLY CONTAINS\n";
+        print "$tab"."* CUSTOM SETTINGS. YOU ARE FORCED TO UPDATE MANUALLY!\n";
+    }
+    if ($state =~ /^$state2$/) {
+        print "$tab"."* YOU ARE ABOUT TO UPDATE A MODIFIED BINARY. YOU SHOULD ASK YOURSELF\n";
+        print "$tab"."* WHO CHANGED IT AND WHY? WHAT DOES IT DO? THIS FILE COULD EVEN BE\n";
+        print "$tab"."* REPLACED BY A VIRUS OR ROOTKIT! YOU SHOULD INVESTIGATE THIS...\n";
+        print "$tab"."* IGNORE THIS WARNING IF YOU RETRY UPDATING AFTER RESTORING A BACKUP!\n";
+    }
+    if ($state =~ /^$state3$/) {
+        print "$tab"."* YOU CAN SAFELY REPLACE THIS UNMODIFIED FILE WITH THE NEW VERSION.\n";
+    }
+    if ($state =~ /^$state4$/) {
+        print "$tab"."* YOU CAN SAFELY REPLACE THIS UNMODIFIED BINARY WITH THE NEW VERSION.\n";
+    }
+    if ($state =~ /^$state5$/) {
+        print "$tab"."* YOU ARE ABOUT TO UPDATE A CUSTOM FILE. YOU SHOULD ASK YOURSELF\n";
+        print "$tab"."* WHERE DOES IT COME FROM AND WHAT HAPPENDS WHEN YOU REPLACE IT?\n";
+        print "$tab"."* PORTAGE DID NOT INSTALL THE CURRENT FILE, MOST LIKELY IT HAS BEEN\n";
+        print "$tab"."* CREATED AFTER INSTALLATION AND IT MAY CONTAIN CUSTOM SETTINGS.\n";
+    }
+    if ($state =~ /^$state6$/) {
+        print "$tab"."* YOU ARE ABOUT TO UPDATE A CUSTOM BINARY. YOU SHOULD ASK YOURSELF\n";
+        print "$tab"."* WHERE DOES IT COME FROM AND WHAT HAPPENDS WHEN YOU REPLACE IT?\n";
+        print "$tab"."* PORTAGE DID NOT INSTALL THE CURRENT BINARY.\n";
+    }
+    if ($state =~ /^$state7$/) {
+        print "$tab"."* OPTIONALLY REPLACE A LINK WITH A FILE. YOU BETTER CHECK BOTH THE\n";
+        print "$tab"."* LINK AND THE FILE FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
+    }
+    if ($state =~ /^$state8$/) {
+        print "$tab"."* OPTIONALLY REPLACE A FILE WITH A LINK. YOU BETTER CHECK BOTH THE\n";
+        print "$tab"."* FILE AND THE LINK FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
+    }
+    if ($state =~ /^$state9$/) {
+        print "$tab"."* OPTIONALLY REPLACE A LINK WITH A LINK. YOU BETTER CHECK BOTH LINKS\n";
+        print "$tab"."* FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</show_warning>\n"; }
+}
+
+sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arguments are used)
+    if ($opt_d >= 1) { print "$tab"."<print_usage>\n"; $tab = $tab."    "; }
+    if ($opt_t !~ /^novalue$/) {
+        &tool_intro($merge_tool_name);
+    } else {
+# 80 chars            ________________________________________________________________________________
+        print "$tab"."\n";
+        print "$tab"."USAGE     $progname [runmode] [options]              (version $version)\n";
+        print "$tab"."\n";
+        print "$tab"."RUNMODES\n";
+        print "$tab"."  -l, --list\n";
+        print "$tab"."          List updates (._cfg0000_* files) including modification state\n";
+        print "$tab"."          Examples: $progname -l         : list updates on localhost\n";
+        print "$tab"."                    $progname -l -h1 -l  : list updates on remote host 1\n";
+        print "$tab"."                    $progname -l -h0-100 : list localhost + remote host 1-100\n";
+        print "$tab"."\n";
+        print "$tab"."  -u, --update\n";
+        print "$tab"."          Update the protected configuration files\n";
+        print "$tab"."          Examples: $progname -u         : update localhost\n";
+        print "$tab"."                    $progname -up        : update pretend-only\n";
+        print "$tab"."                    $progname -ua        : update automatic-only\n";
+        print "$tab"."                    $progname -um        : update manual-only\n";
+        print "$tab"."                    $progname -u -h1     : update remote host 1\n";
+        print "$tab"."                    $progname -u -h0-100 : update localhost + remote host 1-100\n";
+        print "$tab"."\n";
+        print "$tab"."  -b, --backups\n";
+        print "$tab"."          List backup files, with numbers for use with the -r option\n";
+        print "$tab"."          The backups are stored in $backup_path\n";
+        print "$tab"."          Examples: $progname -b         : list all backups localhost\n";
+        print "$tab"."                    $progname -b -h1     : list all backups remote host 1\n";
+        print "$tab"."\n";
+        print "$tab"."  -r [x], --restore [x]\n";
+        print "$tab"."          Restore a backup by using a number [x] from the -b output\n";
+        print "$tab"."          Examples: $progname -r10       : restore backup 10 on localhost\n";
+        print "$tab"."                    $progname -r10 -h1   : restore backup 10 on remote host 1\n";
+        print "$tab"."\n";
+        print "$tab"."  --mount\n";
+        print "$tab"."          Mounts the remote hosts specified in $hosts_file\n";
+        print "$tab"."\n";
+        print "$tab"."  --check\n";
+        print "$tab"."          Checks the remote hosts for problems and shows their status\n";
+        print "$tab"."\n";
+        print "$tab"."  --unmount\n";
+        print "$tab"."          Unmounts the remote hosts specified in $hosts_file\n";
+        print "$tab"."\n";
+        print "$tab"."OPTIONS\n";
+        print "$tab"."  -a, --automatic-only\n";
+        print "$tab"."          Skips all manual updates (for use with cronjobs)\n";
+        print "$tab"."\n";
+        print "$tab"."  -m, --manual-only\n";
+        print "$tab"."          Skips all automatic updates\n";
+        print "$tab"."\n";
+        print "$tab"."  -h [x|x-y], --host [x|x-y]\n";
+        print "$tab"."          Includes sshfs mounted remote hosts (combine with -u, -l, -b, -r)\n";
+        print "$tab"."          With this option you can perform updates on multiple remote machines\n";
+        print "$tab"."          from a single location. Listing updates, updating, listing backups\n";
+        print "$tab"."          and restoring backups on remote machines are all possible.\n";
+        print "$tab"."          For configuration info see: $hosts_file\n";
+        print "$tab"."\n";
+        print "$tab"."  -t [tool], --tool [tool]\n";
+        print "$tab"."          Set mergetool, overrides the default setting in $settings\n";
+        print "$tab"."          GUI tools: xxdiff, kdiff3, meld, tkdiff, gtkdiff, gvimdiff\n";
+        print "$tab"."          CLI tools: vimdiff, sdiff, imediff2\n";
+        print "$tab"."\n";
+        print "$tab"."  -p, --pretend\n";
+        print "$tab"."          Pretend, simulate the update session without changing anything\n";
+        print "$tab"."\n";
+        print "$tab"."  -v, --verbose\n";
+        print "$tab"."          Verbose output, shows all file operations and unhides STDERR messages\n";
+        print "$tab"."\n";
+        print "$tab"."  -d, --debug\n";
+        print "$tab"."          Debugging mode, unhides STDERR messages and shows subroutine tags\n";
+        print "$tab"."\n";
+        print "$tab"."SPECIAL OPTIONS\n";
+        print "$tab"."  -i, --index (--paludis)\n";
+        print "$tab"."          Creates or updates the checksum-index if neccesary.\n";
+        print "$tab"."          The index is neccesary for determining which files can be updated\n";
+        print "$tab"."          automatically. The index needs to be updated before installing new\n";
+        print "$tab"."          packages. A hook will be created in $portage_hook so you don't\n";
+        print "$tab"."          have to do this manually. When Paludis is installed, $progname will\n";
+        print "$tab"."          add a hook to $paludis_hook\n";
+        print "$tab"."          The Portage hook will execute: $progname --index\n";
+        print "$tab"."          The Paludis hook will execute: $progname --index --paludis\n";
+        print "$tab"."\n";
+        print "$tab"."  -s, --show-protected-dirs\n";
+        print "$tab"."          Shows directories protected by the CONFIG_PROTECT system variable\n";
+        print "$tab"."          $progname searches for updates in the CONFIG_PROTECT directories\n";
+        print "$tab"."\n";
+        print "$tab"."  --optimize-backups\n";
+        print "$tab"."          Backups can be used for automatic 3-way merging. This option creates\n";
+        print "$tab"."          extra backups to maximize the chances of future automatic updates\n";
+        print "$tab"."\n";
+        print "$tab"."  --check-packages\n";
+        print "$tab"."          Checks packages installed with Paludis <0.20.0 and will show you a\n";
+        print "$tab"."          list of packages that need to be re-installed with Paludis 0.20.0\n";
+        print "$tab"."          or higher. If you do not re-install these packages you risk losing\n";
+        print "$tab"."          custom settings in the configfiles belonging to these packages!\n";
+        print "$tab"."          This applies only to people who have used Paludis version <0.20.0!\n";
+        print "$tab"."\n";
+        print "$tab"."SETTINGS (from $settings)\n";
+        print "$tab"."  Stage1  >>  Automatic replacing     - ";
+        if ($enable_stage1 =~ /^yes$|^true$|^on$/i) { print "enabled\n"; } else { print "disabled\n"; }
+        print "$tab"."  Stage2  >>  Automatic 3-way merging - ";
+        if ($enable_stage2 =~ /^yes$|^true$|^on$/i) { print "enabled\n"; } else { print "disabled\n"; }
+        print "$tab"."  Stage3  >>  Manual 3-way merging    - ";
+        if ($tool_supports_3way =~ "yes") {
+            if ($enable_stage3 =~ /^yes$|^true$|^on$/i) {
+            print "enabled\n";
+            } else {
+                print "disabled\n";
+            }
+        } else {
+            print "disabled (not supported by $merge_tool_name)\n";
+        }
+        print "$tab"."  Stage4  >>  Manual 2-way merging    - ";
+        if ($tool_supports_2way =~ "yes") {
+            if ($enable_stage4 =~ /^yes$|^true$|^on$/i) {
+                print "enabled\n";
+            } else {
+                print "disabled\n";
+            }
+        } else {
+            print "disabled (not supported by $merge_tool_name)\n";
+        }
+        print "$tab"."  Stage5  >>  Manual replacing        - ";
+        if ($enable_stage5 =~ /^yes$|^true$|^on$/i) { print "enabled\n"; } else { print "disabled\n"; }
+        print "$tab"."\n";
+        print "$tab"."USAGE INFORMATION\n";
+        print "$tab"."  Start (as root) with \"$progname -l\" to list all the ._cfg0000_* files,\n";
+        print "$tab"."  followed by \"$progname -u\" to update the current config files one by one.\n";
+        print "$tab"."  You can also use the --pretend mode with \"$progname -u -p\" to see how\n";
+        print "$tab"."  $progname will handle the files without actually updating them.\n";
+        print "$tab"."  Take a look in the manpage for more usage examples...\n";
+        print "$tab"."\n";
+        print "$tab"."MERGETOOL INFORMATION\n";
+        print "$tab"."  $merge_tool";
+        if ($tool_supports_3way =~ "yes") {
+            print "  (manual 3-way merging is supported)\n";
+        } else {
+            print "  (manual 3-way merging is not supported)\n";
+        }
+        &tool_intro($merge_tool_name);
+        print "$tab"."\n";
+        print "$tab"."For more info, type \"man cfg-update\"\n";
+        print "$tab"."or visit $website\n\n";
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</print_usage>\n"; }
+}
+
+sub show_debug_info {
+    if ($opt_d >= 1) { print "$tab"."<show_debug_info>\n"; $tab = $tab."    "; }
+        $debug = "";                # removes "2>/dev/null" from all shell-commands so any error message will be shown
+        print "$tab"."version           = $version\n";
+        print "$tab"."merge_tool_name   = $merge_tool_name\n";
+        print "$tab"."merge_tool        = $merge_tool\n";
+        print "$tab"."xxdiff_style      = $xxdiff_style\n";
+        print "$tab"."index_file        = $index_file\n";
+        print "$tab"."hosts_file        = $hosts_file\n";
+        print "$tab"."portage_hook      = $portage_hook\n";
+        print "$tab"."paludis_hook      = $paludis_hook\n";
+        print "$tab"."pkg_manager       = $pkg_manager\n";
+        print "$tab"."pkg_db            = $pkg_db\n";
+        print "$tab"."install_log       = $install_log\n";
+        print "$tab"."find_string       = $find_string\n";
+        print "$tab"."backup_path       = $backup_path\n";
+        print "$tab"."enable_backups    = $enable_backups\n";
+        print "$tab"."enable_stage1     = $enable_stage1\n";
+        print "$tab"."enable_stage2     = $enable_stage2\n";
+        print "$tab"."enable_stage3     = $enable_stage3\n";
+        print "$tab"."enable_stage4     = $enable_stage4\n";
+        print "$tab"."enable_stage5     = $enable_stage5\n";
+        print "$tab"."config_new        = $config_new\n";
+        print "$tab"."rm_new            = $rm_new\n";
+        print "$tab"."temp_new          = $temp_new\n";
+        print "$tab"."backup_new        = $backup_new\n";
+        print "$tab"."restore_new       = $restore_new\n";
+        print "$tab"."rm_old            = $rm_old\n";
+        print "$tab"."temp_old          = $temp_old\n";
+        print "$tab"."backup_old        = $backup_old\n";
+        print "$tab"."restore_old       = $restore_old\n";
+        print "$tab"."merged            = $merged\n";
+        print "$tab"."opt_i = $opt_i\n";
+        print "$tab"."opt_f = $opt_f\n";
+        print "$tab"."opt_s = $opt_s\n";
+        print "$tab"."opt_l = $opt_l\n";
+        print "$tab"."opt_u = $opt_u\n";
+        print "$tab"."opt_b = $opt_b\n";
+        print "$tab"."opt_r = $opt_r\n";
+        print "$tab"."opt_a = $opt_a\n";
+        print "$tab"."opt_m = $opt_m\n";
+        print "$tab"."opt_d = $opt_d\n";
+        print "$tab"."opt_p = $opt_p\n";
+        print "$tab"."opt_v = $opt_v\n";
+        print "$tab"."opt_h = $opt_h\n";
+        print "$tab"."opt_t = $opt_t\n";
+        print "$tab"."opt_help                 = $opt_help\n";
+        print "$tab"."opt_test_code            = $opt_test_code\n";
+        print "$tab"."opt_ebuild               = $opt_ebuild\n";
+        print "$tab"."opt_check_hosts          = $opt_check_hosts\n";
+        print "$tab"."opt_mount_hosts          = $opt_mount_hosts\n";
+        print "$tab"."opt_unmount_hosts        = $opt_unmount_hosts\n";
+        print "$tab"."opt_check_packages       = $opt_check_packages\n";
+        print "$tab"."opt_move_backups         = $opt_move_backups\n";
+        print "$tab"."opt_disable_portage_hook = $opt_disable_portage_hook\n";
+        print "$tab"."opt_disable_paludis_hook = $opt_disable_paludis_hook\n";
+        print "$tab"."opt_optimize_backups     = $opt_optimize_backups\n";
+        print "$tab"."mount_count              = $mount_count\n";
+        print "$tab"."mount_first              = $mount_first\n";
+        print "$tab"."mount_last               = $mount_last\n";
+        for (my $x = 0; $x < @mount_point; $x++) {
+            print "$tab"."mount_point[$x]           = \"$mount_point[$x]\"\n";
+        }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</show_debug_info>\n"; }
+}
+
+sub breakpoint { #ARGS# ("variable-1,variable-2,..")
+    if ($opt_d >= 1) { print "$tab"."<breakpoint>\n"; $tab = $tab."    "; }
+    print "$tab"."\n";
+    print "$tab"."$bar2\n";
+    print "$tab"."Breakpoint...\n";
+    for (my $i=0; $i<@_; ++$i) {                             # show contents of variable-1,variable-2,..
+        print "$tab"."   value $i = $_[$i]\n";
+    }
+    print "$tab"."Press [q] to quit or another key to continue...  ";
+    $ENV{readkey}=q{() { read -n1 -r; printf "$REPLY"; }};   #
+    my $key = `bash -c readkey`;                             # read a single key
+    print "$tab"."\n";                                       #
+    print "$tab"."$bar2\n";
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</breakpoint>\n"; }
+    if ($key =~ /q/) { exit; }
+}

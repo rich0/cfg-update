@@ -1,0 +1,234 @@
+# ChangeLog for app-portage/cfg-update
+# Copyright 2002-2005 Gentoo Technologies, Inc.; Distributed under the GPL v2
+# $Header: $
+
+*cfg-update-1.8.2-r1 (18 MAY 2007)
+
+  18 MAY 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update
+  Changed the script so it doesn't install a pre-conigured /root/.bashrc
+  if the user has ALIAS_FILE set to something else.
+  Also added backward compatible variable reading from logfile.
+
+*cfg-update-1.8.2 (17 MAY 2007)
+
+  17 MAY 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update, cfg-update.8,
+  cfg-update-1.8.2.ebuild, cfg-update.conf, cfg-update.hosts, Changelog:
+  Bugfixes: cfg-update does not allow automatic 3-way merging on CUSTOM_FILES
+  anymore. Stage4 called wrong subroutine upon option [1], changed it...
+  Updated the manual, -b option doesn't need -v to display dates anymore.
+  Changed the ebuild so it does not allow installing with userpriv because
+  the ebuild calls the cfg-update script during install and uninstall which
+  needs root privileges to set up the system properly. I also added another
+  restrict flag: primaryuri, which enables me to get an estimate on the
+  number of downloads/users because Portage will first try to download the
+  tarball from my server, if that fails it falls back on the gentoo mirrors.
+  The alias for emerge in /root/.bashrc is deprecated now. I'm now using the
+  /etc/portage/bashrc file for automatic index updating. If Paludis is found
+  an hook wil be placed in /usr/share/paludis/hooks/install_all_pre.
+  The creation of the hooks is done automatically when cfg-update is run by
+  the user. This also allows me to disable the hooks during the pkg_prerm()
+  phase of the ebuild when uninstalling.
+  Added support for yet another CLI merge tool called imediff2.
+  Added support for Paludis. Which packagemanager was last used will be
+  detected automatically by reading the first line of the index.
+  Changed the way backups are stored. They are now stored by default in
+  /var/lib/cfg-update/backups. The default index location has also been
+  changed to /var/lib/cfg-update/checksum.index
+  The index will from now on only contain the MD5 sums from files in the
+  protected directories (see CONFIG_PROTECT). This results in a much smaller
+  index which is neccesary for the new remote-updating functionality.
+  cfg-update can now update multiple remote hosts if they are mounted with
+  sshfs. This is explained in the /etc/cfg-update.hosts file.
+  The script has been completely restructured and I have improved the
+  commandline argument handling. Added a new dependency (sys-apps/findutils)
+  to the ebuild because I now use xargs  when creating the index. This has
+  changed to avoid problems on systems with too many files in /var/db/pkg
+  because grep has a limit for arguments passed to it from a pipe. One user
+  has reported this as a bug... The alias for emerge in /root/.bashrc, which
+  was used to update the index, has been replaced by a hook for the ebuild
+  setup phase in /etc/portage/bashrc. If Paludis is found, a hook will be
+  placed in /usr/share/paludis/hooks/install_pre_all/cfg-update_indexing.bash
+  This means that the ebuild can now disable the hooks upon uninstalling.
+  After installation (or update) the ebuild moves all backups to the new
+  location with the --move-backups command! And too many cosmetic changes
+  to mention in detail here. Phew...
+
+*cfg-update-1.8.0-r6 (02 FEB 2007)
+
+  02 FEB 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update, Changelog:
+  Added separate subroutine to check if GUI is availabe, to fix issues with
+  using cfg-update in a virtual terminal. The GUI-check will is now done only
+  when -u option is being used without -a or -p.
+
+*cfg-update-1.8.0-r5 (21 JAN 2007)
+
+  21 JAN 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update, Changelog:
+  Added separate subroutine to check for alias, to fix issues with using
+  cfg-update as regular user. Non-root user should be able to view all
+  updates with -l, but most other options need you to have root priviledges.
+  Added extra line of text to errormessage when it can't connect with X.
+
+*cfg-update-1.8.0-r4 (21 JAN 2007)
+
+  21 JAN 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.8.0-r4.ebuild,
+  cfg-update, cfg-update.8, cfg-update.conf, Changelog:
+  Minor changes to fix some small bugs. The script now uses grep instead of
+  cat to get information from files. The script now uses /var/log/emerge.log
+  instead of /var/log/portage to determine the last installed package.
+  Added two new options, the first removes unnecessary backup files from
+  previous updates. This leaves the backups from modified files so that 3-way
+  merging is possible on future updates. The second option completely removes
+  all backup files from previous updates which is usefull when permanently
+  uninstalling cfg-update. Also added vimdiff and gvimdiff support. The alias
+  for emerge that calls the wrapperscript (cfg-update --on) is now set in
+  /root/.bashrc and not in /etc/profile anymore. Changed the ebuild so that
+  x11-misc/sux becomes a dependency when "kde" or "gnome" useflags exist.
+  Harald, is there a reason why you changed that in the 1.8.0-r3 ebuild?
+
+*cfg-update-1.8.0-r3 (12 JAN 2006)
+
+  12 JAN 2006; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.8.0-r3.ebuild,
+  cfg-update, cfg-update.8, Changelog:
+  The script now creates the checksum-index when "cfg-update --on" is run
+  after installation. Otherwise the script can't determine the modification
+  state tells the user to create an index first. But the index can't be
+  created because there are still ._cfg0000_ files. A catch 22, but it has
+  now been solved by forcing creation of the index, so all files will be shown
+  as modified during the first update session (until all ._cfg0000_ files are
+  updated) Further sessions will determine modification state correctly which
+  makes autoupdates possible.
+  Removed the text in the ebuild that tells you to run "cfg-update --index"
+  after installation, this is not needed anymore.
+
+*cfg-update-1.8.0-r2 (11 JAN 2006)
+
+  11 JAN 2006; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.8.0-r2.ebuild,
+  cfg-update, cfg-update.8, Changelog, cfg-update.conf .bashrc:
+  Fixed some issues with permissions in /etc/init.d The script now correctly
+  sets the executable flag on files that were executable before updating.
+  I moved the alias for emerge from /root/.bash_profile to /root/.bashrc and
+  removed the --fix option. I have integrated part of it's functionality in
+  the --on option. This eliminates the use of /root/.bash_profile so it's now
+  no longer included in the tarball. Changed the indexing output to better
+  match portage output. Added the xxdiff_style variable to the config file.
+  Added some text to the ebuilds pkg_postrm() section.
+  I have removed the code that restores the MD5 checksum when you undo an
+  update with the -r option. It restored the wrong sum which caused the
+  restored config file to always be flagged as unmodified resulting in an
+  automatic update on the next update while the file may contain custom
+  settings. Now cfg-update will always handle a restored file as being
+  modified to force a manual update!
+
+*cfg-update-1.8.0-r1 (03 JAN 2006)
+
+  03 JAN 2006; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.8.0-r1.ebuild,
+  cfg-update, cfg-update.conf:
+  The 1.8.0 release was only available as testing ebuild, version 1.8.0-r1
+  has been added to portage after some small bugfixes. The previous version
+  of the ebuild did not install the config file in /etc, this one does.
+
+*cfg-update-1.8.0 (01 JAN 2006)
+
+  01 JAN 2006; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.8.0.ebuild,
+  cfg-update, cfg-update.8, Changelog, cfg-update.conf, README, .bashrc,
+  .bash_profile, emerge_with_indexing_for_cfg-update_phphelper:
+  I decided that cfg-update had to support the 3-way merging functionality
+  of the merge tools. Then I found out that I could also merge 3 files with
+  /usr/bin/diff3. The code started to look like a plate of spagetti so I
+  basically rewrote large parts of the script. The biggest change is that
+  cfg-update now runs through 5 different stages to update the various types
+  of configuration files. These stages can be enabled or disabled in the new
+  configuration file /etc/cfg-update.conf which now holds the configurable
+  settings and some basic information about the updating process.
+  I added support for cronjobs with a new flag -a. The -p option changed and
+  now sets the --pretend mode. You can still list all protected directories
+  with the new -s option. And added a new -m flag to force manual updating.
+  Fixed the delay on non-merging emerge commands, but included the scripts
+  "emerge_with_indexing_for_cfg-update_phphelper" and a bash version
+  "emerge_with_indexing_for_cfg-update_phphelper" in the ebuild for those
+  who still feel the urge to completely skip running cfg-update with
+  non-merging emerge commands.
+  I have also fixed the handling of updates that involve symlinks and there
+  are many small changes and improvements.
+
+*cfg-update-1.7.2 (08 SEP 2005)
+
+  08 SEP 2005; S. van Boven <sboven@zeelandnet.nl> cfg-update:
+  Released version 1.7.2 to fix a minor bug with handling variables with
+  extra spaces in /etc/make.conf. It now uses portageq, which is a bit slower
+  for reading the variables.
+
+*cfg-update-1.7.1 (25 APR 2005)
+
+  25 APR 2005; S. van Boven <sboven@zeelandnet.nl> cfg-update-1.7.1.ebuild,
+  cfg-update:
+  Lot's of small changes to the script to get it ready for the portage tree.
+  It now uses a more clever emerge alias so you can use USE flags even when
+  the alias for emerge is loaded. The name of the script changed, I have
+  removed the .pl extension. The script will be installed directly into
+  /usr/bin and no longer as a link to /usr/lib/cfg-update/cfg-update.pl
+  I have implemented a --convert option that replaces the convert.sh
+  shellscript. The manpage is changed accordingly and the ebuild has been
+  revised with better USE flag support and cleaner output.
+
+*cfg-update-1.7 (24 JAN 2005)
+
+  24 JAN 2005; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.7.ebuild,
+  cfg-update.pl:
+  Lot's of changes to the structure of the program to enable it to use
+  other diff/merge tools more easily. Removed some bloat functions from the
+  script and updated the man page. Added the --gui option that forces the
+  GUI tool, so if you set the GUI tool to sdiff, it forces that tool even
+  when in a GUI environment. The ebuild now makes use of the USE flags.
+  If you have "qt" or "kde" it will install xxdiff and if you have "gnome"
+  it will install meld. So just use USE="-qt -kde" if you don't want xxdiff
+  to be installed as a dependency. This way users don't have to install the
+  QT library for xxdiff when they have a Gnome system.
+
+*cfg-update-1.6 (10 FEB 2004)
+
+  10 FEB 2004; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.6.ebuild,
+  cfg-update.pl:
+  Changed backup filename format to ._cfg-old_* and ._cfg-new_* to avoid
+  problems with backups being run during startup in /etc/init.d. The ebuild
+  converts all old backups to the new format.
+
+*cfg-update-1.5 (12 JAN 2004)
+
+  12 JAN 2004; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.5.ebuild,
+  cfg-update.pl:
+  Bugfix, the script did not check if original config file was executable and
+  after updating files in /etc/init.d/ they would not execute unless manually
+  changed with chmod. The script now checks if the original is executable and
+  performs a chmod +x on the updated version of that file.
+  The script now uses strict, so some variables are not global anymore.
+
+*cfg-update-1.4 (07 DEC 2003)
+
+  07 DEC 2003; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.4.ebuild:
+  Added a new file state [binary] and enabled the overwrite function for
+  binary files. Added a line to the man page that explains why a restored
+  file shows up as [modified] even when it has not been modified at all.
+  Added an automatic update mode for [unmodified] and [binary] files...
+  Updated the man page accordingly.
+
+*cfg-update-1.3 (18 NOV 2003)
+
+  18 NOV 2003; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.3.ebuild:
+  Added -v option and removed the verbosity and startup mode setting from the
+  -c configuration screen. Added -i option that shows information about the
+  file; modification and the ebuild(s) containing this file. The -s option
+  has been removed. Fixed some small bugs and removed obsolete subroutines.
+  Included the files .bashrc, .bash_profile and .Xdefaults in the tarball and
+  changed the script so it doesn't download these files but simply copies them
+  from the package directory when you use the --check option. Moved the index
+  from /etc/cfg-update.index to /usr/lib/cfg-update/checksum.index
+  Updated the man page accordingly and added it to section (8) instead of (1)
+  Added an "undocumented" feature:
+  cfg-update [-v] [--cli] [file1] [file2]
+  You can simply pass two files as arguments but no backups will be created!
+
+*cfg-update-1.2 (04 NOV 2003)
+
+  04 NOV 2003; S. van Boven <xentric@zeelandnet.nl> cfg-update-1.2.ebuild:
+  Initial import.  Ebuild submitted by S. van Boven <sboven@zeelandnet.nl>.

@@ -1,0 +1,36 @@
+#!/bin/bash
+if [ -e "/usr/bin/cfg-update" ]; then
+    long_args=(help info metadata sync search changelog fetchonly fetch-all-uri pretend searchdesc version)
+    short_args=(h s l f p S V)
+    break=0
+    for arg in $*; do
+        if [ "${arg:0:1}" = "-" ]; then
+            if [ "${arg:1:1}" = '-' ]; then
+                for s in ${long_args[*]}; do
+                    if [ "$s" == "${arg:2}" ]; then
+                        break='1'
+                    fi
+                done
+            else
+                for ((i=1;i<${#arg};i++)); do
+                    for s in ${short_args[*]}; do
+                        if [ "$s" == "${arg:$i:1}" ]; then
+                            break='1'
+                        fi
+                    done
+                done
+            fi
+        fi
+        if [ $break == '1' ]; then
+            break
+        fi
+    done
+    if [ $break == '0' ]; then
+        cfg-update --index
+    else
+        echo ">>> cfg-update: skipping index update..."
+    fi
+else
+    echo "*** cfg-update not found, disable the alias for emerge in /root/.bashrc !"
+fi
+emerge $*           # run emerge whatever the case may be...

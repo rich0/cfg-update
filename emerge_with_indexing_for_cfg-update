@@ -1,0 +1,7 @@
+#!/bin/bash
+if [ -e "/usr/bin/cfg-update" ]; then
+    cfg-update --index
+else
+    echo "*** cfg-update not found, disable the alias for emerge in /root/.bashrc !"
+fi
+emerge $*             # run emerge whatever the case may be...
