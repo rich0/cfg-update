@@ -369,7 +369,7 @@ $Term::ANSIColor::AUTORESET = 1;
         $install_log = "/var/log/paludis.log";
         $find_string = "finished install of package";
     }
-# Else set the package manager to Paludis...
+# Else set the package manager to Portage...
     else {
         $pkg_manager = "Portage";
         $install_log = "/var/log/emerge.log";
