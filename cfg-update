@@ -248,7 +248,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $opt_check_hosts = 0;
     my $opt_mount_hosts = 0;
     my $opt_unmount_hosts = 0;
-    my $opt_check_packages = 0;
     my $opt_move_backups = 0;
 #    my $opt_enable_portage_hook = 0;
 #    my $opt_enable_paludis_hook = 0;
@@ -281,7 +280,6 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('mount+'                   => \$opt_mount_hosts);
         GetOptions ('unmount+'                 => \$opt_unmount_hosts);
         GetOptions ('move-backups+'            => \$opt_move_backups);
-        GetOptions ('check-packages+'          => \$opt_check_packages);
         GetOptions ('optimize-backups+'        => \$opt_optimize_backups);
     }
 # Update the mergetool and mergetoolname variable with optional commandline argument -t...
@@ -365,6 +363,18 @@ $Term::ANSIColor::AUTORESET = 1;
         $enable_stage4  = "no";
         $enable_stage5  = "no";
     }
+# If --paludis is used then set the package manager to Paludis...
+    if ($opt_paludis > 0) {
+        $pkg_manager = "Paludis";
+        $install_log = "/var/log/paludis.log";
+        $find_string = "finished install of package";
+    }
+# Else set the package manager to Paludis...
+    else {
+        $pkg_manager = "Portage";
+        $install_log = "/var/log/emerge.log";
+        $find_string = "::: completed emerge";
+    }
 # If debug mode is detected show most important variables...
     if ($opt_d >= 1) { &show_debug_info; }
 # Force building the checksum-index if it's missing (except when --ebuild option is used)...
@@ -376,33 +386,12 @@ $Term::ANSIColor::AUTORESET = 1;
             print "$tab"."You need root privileges to create the index...\n";
             exit;
         } else {
-            if (-e "/usr/bin/paludis") {
-                $pkg_manager = "Paludis";
-                $install_log = "/var/log/paludis.log";
-                $find_string = "finished install of package";
-            } elsif (-e "/usr/bin/emerge") {
-                $pkg_manager = "Portage";
-                $install_log = "/var/log/emerge.log";
-                $find_string = "::: completed emerge";
-            }
             &find_protected_dirs;
             &build_index;
         }
     }
-# If --index --paludis is used (in Paludis hook) then set the package manager to Paludis and check/build index...
-    if (($opt_i > 0) && ($opt_paludis > 0)) {
-        $pkg_manager = "Paludis";
-        $install_log = "/var/log/paludis.log";
-        $find_string = "finished install of package";
-        &root_only;
-        &check_index;
-        exit;
-    }
-# If only --index is used (in Portage hook) then set the package manager to Portage and check/build index...
+# If --index is used then check/build index...
     if ($opt_i > 0) {
-        $pkg_manager = "Portage";
-        $install_log = "/var/log/emerge.log";
-        $find_string = "::: completed emerge";
         &root_only;
         &check_index;
         exit;
@@ -439,7 +428,6 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_r > 0)                    { &root_only; &restore_backups($opt_r); exit; }
     if ($opt_disable_portage_hook > 0) { &root_only; &disable_portage_hook; exit; }
     if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
-    if ($opt_check_packages > 0)       { &check_packages; exit; }
     if ($opt_move_backups > 0)         { &root_only; &move_backups; exit; }
     if ($opt_optimize_backups > 0)     { &root_only; &optimize_backups; exit; }
     if ($opt_unmount_hosts > 0)        { &root_only; &unmount_hosts; exit;}
@@ -514,7 +502,7 @@ sub root_only{ #ARGS# ("text")
 sub check_hooks {
     if ($opt_d >= 1) { print "$tab"."<check_hooks>\n"; $tab = $tab."    "; }
 # Try to enable the Paludis hook...
-    if (-e "/usr/bin/paludis") {
+    if (-e "/usr/bin/cave") {
         my $hook_dir = dirname($paludis_hook);
         if (!-d "$hook_dir") {
             print "$tab"."Paludis hook directory $hook_dir not found...\n";
@@ -575,7 +563,7 @@ sub check_hooks {
                 print "$tab"."The alias for emerge, used for updating the index, is now deprecated...\n";
                 print "$tab"."$progname now uses hooks instead of the alias for emerge...\n";
                 if (-e "/usr/bin/emerge") { print "$tab"."For Portage a new hook has been created in $portage_hook\n"; }
-                if (-e "/usr/bin/paludis") { print "$tab"."For Paludis a new hook has been created in $paludis_hook\n"; }
+                if (-e "/usr/bin/cave") { print "$tab"."For Paludis a new hook has been created in $paludis_hook\n"; }
                 print BOLD YELLOW "$tab"."You should remove the alias for emerge in $alias_file\n";
                 print BOLD YELLOW "$tab"."followed by running this command: \"unalias emerge\"\n";
                 print "*******************************************************************************\n";
@@ -583,96 +571,6 @@ sub check_hooks {
         }
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_hooks>\n"; }
-}
-
-sub check_packages { #RUNMODE# --check-packages
-    if ($opt_d >= 1) { print "$tab"."<check_packages>\n"; $tab = $tab."    "; }
-# Paludis version <0.20 wrote the wrong MD5-checksum in the CONTENTS file during installation.
-# This subroutine tries to find if there are affected packages on the system.
-# If it finds any, it will exit and prompt the user to update these packages...
-    my @pkg_list;
-    my @pkg_list_bad;
-    my $pkg_cat;
-    my $pkg_name_ver;
-    @pkg_list = `echo /var/db/pkg/*/*/VDB_FORMAT $debug | xargs grep -H "paludis" $debug`;
-    chomp @pkg_list;
-    &find_protected_dirs;
-    for (my $i = 0; $i < @pkg_list; $i++) {
-        $_ = $pkg_list[$i]; /^$pkg_db\//; $pkg_name_ver = $';      # take everything behind "/var/db/pkg/"
-        $_ = $pkg_name_ver; /\/VDB_FORMAT/; $pkg_name_ver = $`;    # take everything infront of "/VDB_FORMAT"
-        $_ = $pkg_name_ver; /\//; $pkg_name_ver = $';              # take everything behind "/"
-        $pkg_cat = $`;                                             # take everything infront of "/"
-        if (($opt_d >= 1)||($opt_v >= 1)) { print "$i. Checking : $pkg_cat/$pkg_name_ver\n"; }
-        my $installer = `grep "paludis" /var/db/pkg/$pkg_cat/$pkg_name_ver/PKGMANAGER $debug`;
-        chomp $installer;
-        if (!$installer) {
-# Paludis version >= 0.2.5 and < 0.6.7 = possibly BAD checksums in CONTENTS file, abort...
-            for (my $i = 0; $i < @dir; $i++) {
-                if (`grep "^obj $dir[$i]" /var/db/pkg/$pkg_cat/$pkg_name_ver/CONTENTS $debug`) {
-                    push(@pkg_list_bad,"=$pkg_cat/$pkg_name_ver ");
-                    if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD RED "Added to rebuild_list: has files in CONFIG_PROTECT directory, unsafe!\n"; }
-                } else {
-                    if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Has no files in CONFIG_PROTECT directory, files are safe...\n"; }
-                }
-            }
-        } else {
-            if (($opt_d >= 1)||($opt_v >= 1)) { print "Installer    = $installer\n"; }
-            $_ = "";
-            $_ = $installer; /paludis-/; $installer = $';  # take everything behind "paludis-"
-            $_ = $installer; /\./; $installer = $';        # take everything behind "."
-            $_ = $installer; /\./; $installer = $`;        # take everything infront of "."
-            if ($installer <= 19) {
-# Paludis version >= 0.6.7 and < 0.20 = possibly BAD checksums in CONTENTS file, abort...
-                for (my $i = 0; $i < @dir; $i++) {
-                    if (`grep "^obj $dir[$i]" /var/db/pkg/$pkg_cat/$pkg_name_ver/CONTENTS $debug`) {
-                        push(@pkg_list_bad,"=$pkg_cat/$pkg_name_ver");
-                        if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD RED "Added to rebuild_list: has files in CONFIG_PROTECT directory, unsafe!\n"; }
-                    } else {
-                        if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Has no files in CONFIG_PROTECT directory, files are safe...\n"; }
-                    }
-                }
-            } else {
-# Paludis version >= 0.20 = GOOD checksums in CONTENTS file, continue...
-                if (($opt_d >= 1)||($opt_v >= 1)) { print BOLD GREEN "Installed with Paludis 0.20.0 or higher, files are safe...\n"; }
-            }
-        }
-        if (($opt_d >= 1)||($opt_v >= 1)) { print "\n"; }
-    }
-# Print instructions and exit if BAD packages have been found, else continue...
-    if (@pkg_list_bad > 0) {
-        my $count1 = @pkg_list;
-        my $count2 = @pkg_list_bad;
-        print "*******************************************************************************\n";
-        print "\n";
-        print "A bug in Paludis <0.20.0 caused the wrong checksums to be written to the\n";
-        print "CONTENTS files which are used by $progname to determine if files have been\n";
-        print "modified by you. Due to these faulty checksums these files appear to be\n";
-        print "unmodified. So $progname will automatically replace them with the new default\n";
-        print "configfile! *** YOU RISK LOSING CUSTOM SETTINGS IN CRITICAL FILES!!! ***\n";
-        print "\n";
-        print "Found $count1 packages installed with Paludis version < 0.20.0\n";
-        print "You need to re-install $count2 of these packages with Paludis 0.20.0 (or higher)\n";
-        print "to avoid problems with future updating of the configuration files from these\n";
-        print "packages!\n";
-        print "\n";
-        print "Please check if Paludis version is >=0.20.0 and run the following command:\n";
-        print "\n";
-        print BOLD YELLOW "paludis -i -1 --dl-upgrade as-needed @pkg_list_bad\n";
-        print "\n";
-        print "VERY IMPORTANT: when done re-installing the above packages, you need to run the\n";
-        print "run the following command before updating any configfiles:\n";
-        print "\n";
-        print BOLD YELLOW "$progname --force --index\n";
-        print "\n";
-        print "If you do not want to do the above you should disable stage1 permanently in\n";
-        print "$settings otherwise $progname will automatically overwrite the\n";
-        print "configfiles belonging to the affected packages. YOU HAVE BEEN WARNED!!!\n";
-        print "\n";
-        print "*******************************************************************************\n";
-    } else {
-        print "No need to re-install packages...\n";
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_packages>\n"; }
 }
 
 sub check_index{ #RUNMODE# -i, --index
@@ -720,11 +618,11 @@ sub build_index{
     if ((@list == 0) || ($opt_f > 0)) {
         print "$tab".">>> "; print BOLD WHITE "$progname-$version"; print ": Creating checksum index...\n";
         open(FILE, ">$index_file") || die "$tab"."  Can't open $index_file\n";
-            if ((!-e $install_log) || ($opt_f > 0)) {
-                print FILE "$pkg_manager:0000000000\n";
-            } else {
-                print FILE "$pkg_manager:$log_pkg\n";
-            }
+        if ((!-e $install_log) || ($opt_f > 0)) {
+            print FILE "$pkg_manager:0000000000\n";
+        } else {
+            print FILE "$pkg_manager:$log_pkg\n";
+        }
         close(FILE);
         local $ENV{LC_ALL}="C";
         if ($opt_d >= 1) { print "$tab"."echo $pkg_db/*/*/CONTENTS | xargs grep \"^obj \" | cut -d\" \" -f2-3 $debug >> $index_file`\n"; }
@@ -871,7 +769,7 @@ sub remote_host_checks{ #ARGS# ("mount_point","i")
 # Do some simple checks to see if the remote filesystem is available and correctly set up
     my $remote_backup_path = "";
     my $mount_point = $_[0];
-       $mount_point =~ s/\/$//;  # strip trailing slash from mountpoint
+    $mount_point =~ s/\/$//;  # strip trailing slash from mountpoint
     my $num = $_[1];
     if ($num == 0) { $mount_point = "/"; }
     if (!-d "$mount_point") {
@@ -1325,7 +1223,7 @@ sub make_temp_backups{ #ARGS# ("pretend|execute")
                 `mkdir -p "$path"`;
             }
             `cp -pP "$file2" "$file7" $debug`;
-         }
+        }
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
 }
@@ -1582,14 +1480,14 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                 if ($merge_tool_name =~ /^diff$/) {
                     print "$tab"."  Press [v] - to view differences between the current and ._cfg0000_* file\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-		    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
+                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
                     print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  View differences between the current and update file? [v|s|1|2|q] ";
                 } else {
                     print "$tab"."  Press [y] - to merge the current file and the ._cfg0000_* file with $merge_tool_name\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-		    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
+                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
                     print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  Merge manually with file : $file2 ? [y|s|1|2|q] ";
@@ -1599,7 +1497,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                     if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
                     if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
                     if ($key =~ /s/) { &update_canceled($_[0]); }
-		    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
+                    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
                     if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
@@ -2190,8 +2088,8 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         &determine_state;
         my $percentage = int($num/$totalcount*100);
         if (-e "$file2") {
-                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-                    print "$tab"."$percentage% - Skip file $file1\n";
+            if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+            print "$tab"."$percentage% - Skip file $file1\n";
             if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (exists in repository)\n"; }
         } else {
             if (($state =~ $state3) || ($state =~ $state4)) {
@@ -2202,13 +2100,13 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
                     if ($opt_d >= 1) { print "$tab"."mkdir -p $path\n"; }
                     `mkdir -p $path`;
                 }
-                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-                    print "$tab"."$percentage% - Make file $file2\n";
+                if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                print "$tab"."$percentage% - Make file $file2\n";
                 if ($opt_d >= 1) { print "$tab"."[$state] cp -p $file1 $file2\n"; }
                 `cp -p "$file1" "$file2"`;
             } else {
-                    if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-                    print "$tab"."$percentage% - Skip file $file1\n";
+                if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
+                print "$tab"."$percentage% - Skip file $file1\n";
                 if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (not unmodified)\n"; }
             }
         }
@@ -2488,13 +2386,6 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."          Backups can be used for automatic 3-way merging. This option creates\n";
         print "$tab"."          extra backups to maximize the chances of future automatic updates\n";
         print "$tab"."\n";
-        print "$tab"."  --check-packages\n";
-        print "$tab"."          Checks packages installed with Paludis <0.20.0 and will show you a\n";
-        print "$tab"."          list of packages that need to be re-installed with Paludis 0.20.0\n";
-        print "$tab"."          or higher. If you do not re-install these packages you risk losing\n";
-        print "$tab"."          custom settings in the configfiles belonging to these packages!\n";
-        print "$tab"."          This applies only to people who have used Paludis version <0.20.0!\n";
-        print "$tab"."\n";
         print "$tab"."SETTINGS (from $settings)\n";
         print "$tab"."  Stage1  >>  Automatic replacing     - ";
         if ($enable_stage1 =~ /^yes$|^true$|^on$/i) { print "enabled\n"; } else { print "disabled\n"; }
@@ -2503,7 +2394,7 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."  Stage3  >>  Manual 3-way merging    - ";
         if ($tool_supports_3way =~ "yes") {
             if ($enable_stage3 =~ /^yes$|^true$|^on$/i) {
-            print "enabled\n";
+                print "enabled\n";
             } else {
                 print "disabled\n";
             }
@@ -2597,7 +2488,6 @@ sub show_debug_info {
         print "$tab"."opt_check_hosts          = $opt_check_hosts\n";
         print "$tab"."opt_mount_hosts          = $opt_mount_hosts\n";
         print "$tab"."opt_unmount_hosts        = $opt_unmount_hosts\n";
-        print "$tab"."opt_check_packages       = $opt_check_packages\n";
         print "$tab"."opt_move_backups         = $opt_move_backups\n";
         print "$tab"."opt_disable_portage_hook = $opt_disable_portage_hook\n";
         print "$tab"."opt_disable_paludis_hook = $opt_disable_paludis_hook\n";
