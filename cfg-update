@@ -1353,15 +1353,15 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                 if ($merge_tool_name =~ /^diff$/) {
                     print "$tab"."  Press [v] - to view differences between the current file and the ._cfg0000_* file\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
-                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [1] - to use the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  View differences between the current and update file? [v|s|1|2|q] ";
                 } else {
                     print "$tab"."  Press [y] - to merge the current file and the ._cfg0000_* file with $merge_tool_name\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
-                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [1] - to use the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  Merge manually with file : $file2 ? [y|s|1|2|q] ";
                 }
@@ -1370,7 +1370,7 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                     if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
                     if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage3>\n"; } &done; }
                     if ($key =~ /s/) { &update_canceled($_[0]); }
-                    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
+                    if ($key =~ /1/) { &update_replace_complete($_[0]); $key="s"; }
                     if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
@@ -1480,15 +1480,15 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                 if ($merge_tool_name =~ /^diff$/) {
                     print "$tab"."  Press [v] - to view differences between the current and ._cfg0000_* file\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
-                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [1] - to use the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  View differences between the current and update file? [v|s|1|2|q] ";
                 } else {
                     print "$tab"."  Press [y] - to merge the current file and the ._cfg0000_* file with $merge_tool_name\n";
                     print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
-                    print "$tab"."  Press [1] - to replace the current file with the merged result\n";
-                    print "$tab"."  Press [2] - to keep the current file and remove the ._cfg0000_* file\n";
+                    print "$tab"."  Press [1] - to use the ._cfg0000_* file\n";
+                    print "$tab"."  Press [2] - to remove the ._cfg0000_* file\n";
                     print "$tab"."  Press [q] - to quit $progname immediately\n";
                     print "$tab"."  Merge manually with file : $file2 ? [y|s|1|2|q] ";
                 }
@@ -1497,7 +1497,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                     if ($_[0] =~ /^execute$/) { &readkey; } else { $key = "s"; print "s\n"; }
                     if ($key =~ /q/) { &update_canceled($_[0]); if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_stage4>\n"; } &done; }
                     if ($key =~ /s/) { &update_canceled($_[0]); }
-                    if ($key =~ /1/) { &update_merge_complete($_[0]); $key="s"; }
+                    if ($key =~ /1/) { &update_replace_complete($_[0]); $key="s"; }
                     if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
