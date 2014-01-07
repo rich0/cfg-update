@@ -45,7 +45,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $xxdiff_style      = "--style Keramik";
     my $backup_path       = "/var/lib/cfg-update/backups";
     my $index_file        = "/var/lib/cfg-update/checksum.index";
-    my $alias_file        = "/root/.bashrc";
     my $settings          = "/etc/cfg-update.conf";
     my $log_file          = "/var/lib/cfg-update/cfg-update.log";
     my $hosts_file        = "/etc/cfg-update.hosts";
@@ -394,17 +393,6 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_i > 0) {
         &root_only;
         &check_index;
-        exit;
-    }
-# Check if /root/.bashrc exists (except when --ebuild option is used)...
-    if (($opt_ebuild == 0) && (!-f "$alias_file") && ($alias_file = "/root/.bashrc")) {
-        print "$tab"."  $alias_file not found!\n";
-        print "$tab"."  This file is important for properly setting up the root account.\n";
-        &root_only("Can't create a pre-configured $alias_file if you're not root...");
-        `cp -pP /usr/lib/cfg-update/.bashrc $alias_file $debug`;
-        print "$tab"."  Created a pre-configured $alias_file file for you...\n";
-        print "$tab"."  The bash shell will now load /etc/profile when you \"su\" to root...\n";
-        print BOLD YELLOW "$tab"."  Now type: \"source $alias_file\" to load it.\n";
         exit;
     }
 # Check the package manager hooks and enable them if possible (except when --ebuild option is used)...
