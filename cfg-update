@@ -79,8 +79,6 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*ENABLE_STAGE5\s*=\s*/i)     { $enable_stage5     = &strip($'); }
         if ($line =~ /^\s*VIEW_TOOL\s*=\s*/i)         { $view_tool         = &strip($'); }
         if ($line =~ /^\s*BACKUP_PATH\s*=\s*/i)       { $backup_path       = &strip($'); }
-        if ($line =~ /^\s*ALIASFILE\s*=\s*/i)         { $alias_file        = &strip($'); }
-        if ($line =~ /^\s*ALIAS_FILE\s*=\s*/i)        { $alias_file        = &strip($'); }
         if ($line =~ /^\s*HOSTS_FILE\s*=\s*/i)        { $hosts_file        = &strip($'); }
         if ($line =~ /^\s*INDEXFILE\s*=\s*/i)         { $index_file        = &strip($'); }
         if ($line =~ /^\s*INDEX_FILE\s*=\s*/i)        { $index_file        = &strip($'); }
@@ -537,25 +535,6 @@ sub check_hooks {
             `echo "	[[ \\\$ROOT = / ]] && cfg-update --index" >> $portage_hook`;
             `echo "}" >> $portage_hook`;
             if ($opt_d >= 1) { print "$tab"."Created Portage hook in $portage_hook...\n"; }
-        }
-    }
-# Check for old emerge alias and tell user to remove it...
-    if (-e "$alias_file") {
-        local $ENV{LC_ALL}="C";
-        if (`grep ".*alias.*emerge.*=" $alias_file $debug` =~ /cfg-update/) {
-            local $ENV{LC_ALL}="C";
-            if (`grep ".*#.*alias.*emerge.*=" $alias_file $debug` =~ /cfg-update/) {
-                # old alias is already disabled...
-            } else {
-                print "*******************************************************************************\n";
-                print "$tab"."The alias for emerge, used for updating the index, is now deprecated...\n";
-                print "$tab"."$progname now uses hooks instead of the alias for emerge...\n";
-                if (-e "/usr/bin/emerge") { print "$tab"."For Portage a new hook has been created in $portage_hook\n"; }
-                if (-e "/usr/bin/cave") { print "$tab"."For Paludis a new hook has been created in $paludis_hook\n"; }
-                print BOLD YELLOW "$tab"."You should remove the alias for emerge in $alias_file\n";
-                print BOLD YELLOW "$tab"."followed by running this command: \"unalias emerge\"\n";
-                print "*******************************************************************************\n";
-            }
         }
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_hooks>\n"; }
