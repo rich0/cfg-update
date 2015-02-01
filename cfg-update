@@ -43,6 +43,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $merge_tool        = "/usr/bin/xxdiff";
     my $merge_tool_name   = "xxdiff";
     my $view_tool         = "less";
+    my $sdiff_flags       = "-d";
     my $xxdiff_style      = "--style Keramik";
     my $backup_path       = "/var/lib/cfg-update/backups";
     my $index_file        = "/var/lib/cfg-update/checksum.index";
@@ -89,6 +90,7 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*LOGFILE\s*=\s*/i)           { $log_file          = &strip($'); }
         if ($line =~ /^\s*LOG_FILE\s*=\s*/i)          { $log_file          = &strip($'); }
         if ($line =~ /^\s*ROOTDIR\s*=\s*/i)           { $rootdir           = &strip($'); }
+        if ($line =~ /^\s*SDIFF_FLAGS\s*=\s*/i)       { $sdiff_flags       = &strip($'); }
         if ($line =~ /^\s*XXDIFF_STYLE\s*=\s*/i)      { $xxdiff_style      = &strip($'); }
         if ($line =~ /^\s*CONFIG_NEW\s*=\s*/i)        { $config_new        = &strip($'); }
         if ($line =~ /^\s*RM_NEW\s*=\s*/i)            { $rm_new            = &strip($'); }
@@ -707,7 +709,7 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $file2 --nofork 2>\&1>/dev/null"; }
     if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $file5 $file1 $file2 $debug"; }
     if  ($_[1] =~ /\/imediff2$|^imediff2$/ )                                 { $cmd = "$_[1] -c -o $file5 $file1 $file2"; }
-    if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $file5 $file1 $file2"; }
+    if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] $sdiff_flags -w $screenwidth -o $file5 $file1 $file2"; }
     if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $file2 $file4 $file1 > $file5 $debug"; } # by specifying $file1 as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
     if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $file1 $file2 $debug"; } # viewing only...
     if  ($_[0] =~ /execute/) {
@@ -2411,6 +2413,7 @@ sub show_debug_info {
         print "$tab"."version           = $version\n";
         print "$tab"."merge_tool_name   = $merge_tool_name\n";
         print "$tab"."merge_tool        = $merge_tool\n";
+        print "$tab"."sdiff_flags       = $sdiff_flags\n";
         print "$tab"."xxdiff_style      = $xxdiff_style\n";
         print "$tab"."index_file        = $index_file\n";
         print "$tab"."hosts_file        = $hosts_file\n";
