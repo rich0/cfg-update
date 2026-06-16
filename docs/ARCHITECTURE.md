@@ -195,11 +195,11 @@ These enable stage 2's 3-way merges on subsequent updates.
 | `--optimize-backups` | Remove redundant backups while keeping merge-capable pairs |
 | `--move-backups` | Migrate backup directory (used during package upgrades) |
 
-## Remote host support (deprecated)
+## Remote host support (deprecated since 1.9.1)
 
 The `-h` / `--host`, `--mount`, `--check`, and `--unmount` options support managing config updates on remote Gentoo systems mounted via sshfs. Configuration is in `/etc/cfg-update.hosts`.
 
-This feature is **deprecated** for single-host workflows. It remains in the codebase but will emit warnings in a future release. See [INVENTORY.md](INVENTORY.md) for the deprecation plan.
+This feature is **deprecated** (runtime warnings since 1.9.1) and will be removed in a future release. Run `cfg-update` on each host directly. The historical HOWTO is preserved under git tag `1.9.0`.
 
 ## Key global paths
 

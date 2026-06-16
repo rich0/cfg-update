@@ -4,7 +4,7 @@ A safe, staged alternative to Gentoo's `etc-update` for handling configuration f
 
 **Upstream:** Stephan van Boven (Gentoo, 2007)  
 **Maintained fork:** [rich0/cfg-update](https://github.com/rich0/cfg-update)  
-**Version:** 1.8.2-r1  
+**Version:** 1.9.1 (development)  
 **License:** GPL v2 ([COPYING](COPYING))
 
 ## What it does
@@ -74,7 +74,7 @@ See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for required packages.
 | File | Purpose |
 |------|---------|
 | `/etc/cfg-update.conf` | Merge tool, stage toggles, backup/index paths |
-| `/etc/cfg-update.hosts` | Remote sshfs hosts (optional; deprecated for single-host use) |
+| `/etc/cfg-update.hosts` | Legacy sshfs remote hosts (**deprecated**; run cfg-update per host) |
 | `/var/lib/cfg-update/checksum.index` | MD5 index of protected files |
 | `/var/lib/cfg-update/backups/` | Per-update backups for 3-way merging |
 
@@ -107,7 +107,7 @@ man cfg-update             # detailed manual
 
 This fork is being revived on isolated `refactor/stage-*` branches. See [docs/INVENTORY.md](docs/INVENTORY.md) for the cleanup roadmap.
 
-The vendored ebuild in [`gentoo/`](gentoo/) uses **1.9.0** as a placeholder PV until the refactor finishes. Do not tag for release without maintainer approval.
+The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.9.1**). Release **1.9.0** is tagged; do not tag new versions without maintainer approval.
 
 ```bash
 # Validate Perl syntax

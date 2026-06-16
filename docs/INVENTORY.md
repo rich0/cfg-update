@@ -23,7 +23,7 @@ The repository has **no package-manager manifest** (no `package.json`, `cpanfile
 | [`cfg-update`](../cfg-update) | 2490 | Main Perl program (54 subroutines) | **Yes** — core |
 | [`cfg-update.conf`](../cfg-update.conf) | 167 | Config template (installed as `/etc/cfg-update.conf`) | **Yes** |
 | [`cfg-update.8`](../cfg-update.8) | 192 | Man page | **Yes** (update stale refs in stage 2) |
-| [`cfg-update.hosts`](../cfg-update.hosts) | 206 | sshfs remote-host HOWTO + mount definitions | **Deprecate** — not needed for single-host; keep code in stage 4 |
+| [`cfg-update.hosts`](../cfg-update.hosts) | ~40 | Legacy sshfs mount definitions | **Deprecated** (stage 4); HOWTO preserved at git tag 1.9.0 |
 | [`cfg-update_indexing`](../cfg-update_indexing) | 12 | Paludis hook script (copied to `/usr/share/paludis/hooks/...`) | **Yes** if Paludis kept |
 | ~~emerge wrappers / phphelper~~ | — | Legacy emerge alias wrappers | **Removed** (stage 3) |
 | [`ChangeLog`](../ChangeLog) | 235 | Gentoo ebuild changelog (historical) | **Yes** (historical) |
@@ -149,7 +149,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `tool_intro` | 2148 | User guidance per tool |
 | `diff_two_files`, `diff_three_files` | 2121–2148 | Ad-hoc diff mode |
 
-### Remote hosts / sshfs (deprecate, do not delete yet)
+### Remote hosts / sshfs (deprecated since 1.9.1, not deleted yet)
 
 | Subroutine | Lines | Purpose |
 |------------|------:|---------|
@@ -343,7 +343,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | Backup/restore/optimize | **Yes** | Required for 3-way merge |
 | `-l`, `-u`, `-a`, `-p` | **Yes** | Daily usage |
 | Paludis hook + `--paludis` | **Yes** (minimal) | Low cost if path valid |
-| sshfs multi-host (`-h`, `--mount`) | **Deprecate** | Out of scope; warn in stage 4 |
+| sshfs multi-host (`-h`, `--mount`) | **Deprecated** | Runtime warnings since 1.9.1; removal TBD |
 | ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
 | ~~PHP helper~~ | — | Removed (stage 3) |
 | `--test` stub | **Repurpose** | Hook for automated smoke tests (stage 6) |
@@ -358,7 +358,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 |-------|--------|---------|
 | 2 | `refactor/stage-2-docs` | README, ARCHITECTURE.md, DEPENDENCIES.md; fix man page stale paths |
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
-| 4 | `refactor/stage-4-deprecations` | Runtime warning on `--mount`/`--check`/`--unmount`/`-h`; fix hosts HOWTO |
+| 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
 | 5 | `refactor/stage-5-paludis` | Verify hook path; fix or document-only |
 | 6 | `refactor/stage-6-ci-renovate` | `perl -c`, shellcheck, extract test fixtures, `renovate.json` |
 
