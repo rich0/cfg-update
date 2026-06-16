@@ -998,7 +998,7 @@ sub determine_state{ #DEPS# (requires that global variable $file1 contains a fil
         chomp ($md5sum_index = `grep "$file1_without_host " "$host_path$index_file" $debug | cut -d" " -f2 $debug`);
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum in the checksum-index  : $md5sum_index\n"; }
         if ($md5sum_index =~ /.+/) {
-            if ($md5sum_index !~ $md5sum_file) {
+            if (length($md5sum_file) && $md5sum_index !~ $md5sum_file) {
                 $state = $state1; $vstate = $vstate1;                               #  1 = MF = Modified File     - checksum differs from index
                 if (-B "$file1") { $state = $state2; $vstate = $vstate2; }          #  2 = MB = Modified Binary   - you probably replaced the binary file so replace not allowed
             } else {
