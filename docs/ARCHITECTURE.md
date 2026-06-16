@@ -96,7 +96,7 @@ pre_pkg_setup() {
 
 This replaced the older approach of aliasing `emerge` in `/root/.bashrc`. The legacy emerge wrapper scripts and PHP helper were removed in stage 3.
 
-## Paludis hook integration (optional)
+## Paludis hook integration (optional, best-effort)
 
 If `/usr/bin/cave` exists, `check_hooks` also installs a Paludis hook:
 
@@ -106,9 +106,25 @@ If `/usr/bin/cave` exists, `check_hooks` also installs a Paludis hook:
 | Target | `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` |
 | Action | `cfg-update --index --paludis` |
 
+The hook path matches [Paludis hook layout](https://paludis.exherbo.org/configuration/hooks.html) (`install_all_pre` under `/usr/share/paludis/hooks/`). The hook script does not use ebuild-phase helpers (`PALUDIS_EBUILD_DIR`) because `install_all_pre` is a general hook with a limited environment.
+
 Disable: `cfg-update --disable-paludis-hook`
 
-> **Note:** Paludis support is maintained on a best-effort basis. Hook paths should be verified against your Paludis version.
+### Paludis-specific code paths
+
+When `--paludis` is passed (or the Paludis hook runs):
+
+| Setting | Value |
+|---------|-------|
+| `$pkg_manager` | `Paludis` |
+| `$install_log` | `/var/log/paludis.log` |
+| `$find_string` | `finished install of package` |
+| CONFIG_PROTECT | `$pkg_db/.cache/all_CONFIG_PROTECT` |
+| CONFIG_PROTECT_MASK | `$pkg_db/.cache/all_CONFIG_PROTECT_MASK` |
+
+Index building still reads Portage-format `CONTENTS` files under `$pkg_db` — the same tree Paludis uses on Gentoo.
+
+> **Status (1.9.1):** Best-effort and **not verified** on a live Paludis system in this fork. Portage is the supported path. Override `PALUDIS_HOOK` in `/etc/cfg-update.conf` if your hook directory differs.
 
 ## Finding and classifying updates
 

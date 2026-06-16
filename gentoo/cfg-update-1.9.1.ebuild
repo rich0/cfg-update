@@ -4,6 +4,7 @@
 # Fork development ebuild. Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild.
 # Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
 # PV 1.9.0 is tagged; 1.9.1 is the current development line — do not tag without approval.
+# Stage 5: Paludis maskdir fix, hardened install_all_pre hook script.
 
 EAPI=8
 

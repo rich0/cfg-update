@@ -82,16 +82,16 @@ Used to display diffs and file contents during interactive sessions. Can be set 
 
 ## Optional
 
-### Paludis
+### Paludis (optional, best-effort)
 
 Only needed if you use Paludis instead of (or alongside) Portage:
 
 | Requirement | Notes |
 |-------------|-------|
 | `sys-apps/paludis` | Provides `/usr/bin/cave` |
-| Hook path | `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` |
+| Hook path | `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` (override via `PALUDIS_HOOK` in config) |
 
-`cfg-update` auto-installs the hook when `cave` is present.
+`cfg-update` auto-installs the hook when `cave` is present. This path is **not verified** on a Paludis host in the current fork — report issues on GitHub if hooks fail.
 
 ### Remote host management (deprecated since 1.9.1)
 

@@ -495,9 +495,9 @@ sub check_hooks {
     if (-e "/usr/bin/cave") {
         my $hook_dir = dirname($paludis_hook);
         if (!-d "$hook_dir") {
-            print "$tab"."Paludis hook directory $hook_dir not found...\n";
-            print "$tab"."Can't enable Paludis hook...\n";
-            print "$tab"."Make sure that Paludis is installed properly first!\n";
+            if ($opt_v >= 1) {
+                print "$tab"."Paludis hook directory $hook_dir not found (Paludis support is best-effort)...\n";
+            }
         } else {
             if (!-f "$paludis_hook") {
                 &root_only("Can't enable the Paludis hook if you're not root...");
@@ -907,12 +907,15 @@ sub find_masked_dirs{
         @maskdir = grep { ! $seen{$_} ++ } @sdir;                         # move unique elements from @sdir back to @dir (removes doubles)
     }
     if ($pkg_manager =~ /^paludis$/i) {
-        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT_MASK") || die "Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT!\n";
+        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT_MASK") || die "Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT_MASK!\n";
         while (my $line = <FILE>) {
             chomp $line;
-            if (-e $line) { push(@dir, $line); }                          # ignore non-existant directories but push existing dirs into array
+            if (-e $line) { push(@maskdir, $line); }
         }
         close(FILE);
+        my @sdir = sort {lc($a) cmp lc($b)} @maskdir;
+        %seen = ();
+        @maskdir = grep { ! $seen{$_} ++ } @sdir;
     }
     if (@maskdir == 0) { print "$tab"."No masked directories found...\n"; }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_masked_dirs>\n"; }
@@ -2352,8 +2355,8 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."          The index is neccesary for determining which files can be updated\n";
         print "$tab"."          automatically. The index needs to be updated before installing new\n";
         print "$tab"."          packages. A hook will be created in $portage_hook so you don't\n";
-        print "$tab"."          have to do this manually. When Paludis is installed, $progname will\n";
-        print "$tab"."          add a hook to $paludis_hook\n";
+        print "$tab"."          have to do this manually. When Paludis (cave) is installed, $progname\n";
+        print "$tab"."          will add a hook to $paludis_hook (best-effort, lightly tested).\n";
         print "$tab"."          The Portage hook will execute: $progname --index\n";
         print "$tab"."          The Paludis hook will execute: $progname --index --paludis\n";
         print "$tab"."\n";

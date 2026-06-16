@@ -197,19 +197,13 @@ pre_pkg_setup() {
 **Disable:** `--disable-portage-hook` comments out the hook line.  
 **Status:** Active, correct for modern Portage. No repo file needed beyond the main script.
 
-### Paludis (optional — verify in stage 5)
+### Paludis (optional, best-effort — stage 5 complete)
 
 **Detection:** `/usr/bin/cave` exists (L493).  
 **Hook install:** Copies `/usr/lib/cfg-update/cfg-update_indexing` → `$paludis_hook`  
-**Default hook path:** `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` (L42)  
-**Hook script:** [`cfg-update_indexing`](../cfg-update_indexing) runs `cfg-update --index --paludis`  
-**ChangeLog discrepancy:** Historical entry mentions `install_pre_all/cfg-update_indexing.bash`; code uses `install_all_pre/cfg-update.bash`.
-
-| Check | Action for stage 5 |
-|-------|---------------------|
-| Does `/usr/bin/cave` still exist on Gentoo? | Document; Paludis is uncommon |
-| Is `install_all_pre` still valid? | Verify against Paludis docs; fix path if <30 LOC |
-| Does `--paludis` switch log to `/var/log/paludis.log`? | Keep; needed for index freshness |
+**Default hook path:** `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` — matches Paludis docs  
+**Hook script:** [`cfg-update_indexing`](../cfg-update_indexing) — hardened (no `PALUDIS_EBUILD_DIR`)  
+**Stage 5 fixes:** `find_masked_dirs` Paludis branch pushed to `@maskdir` (was `@dir`); not verified on live Paludis host
 
 ### Deprecated emerge wrappers (remove in stage 3)
 
@@ -359,7 +353,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | 2 | `refactor/stage-2-docs` | README, ARCHITECTURE.md, DEPENDENCIES.md; fix man page stale paths |
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
-| 5 | `refactor/stage-5-paludis` | Verify hook path; fix or document-only |
+| 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
 | 6 | `refactor/stage-6-ci-renovate` | `perl -c`, shellcheck, extract test fixtures, `renovate.json` |
 
 ---
