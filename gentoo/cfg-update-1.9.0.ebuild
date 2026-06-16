@@ -1,9 +1,11 @@
 # Copyright 1999-2025 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 #
-# Vendored from ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild
+# Fork development ebuild (PV 1.9.0 placeholder until refactor completes).
+# Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild:
 # https://gitweb.gentoo.org/repo/gentoo.git/tree/app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild
 # Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
+# Bump -r revision (or PV) here as refactor stages land; tag ${PV} on GitHub before release.
 
 EAPI=8
 
@@ -13,7 +15,7 @@ SRC_URI="https://github.com/rich0/cfg-update/archive/${PV}.tar.gz -> ${P}.tgz"
 
 LICENSE="GPL-2"
 SLOT="0"
-KEYWORDS="amd64 ~arm ~arm64 ppc x86"
+KEYWORDS="~amd64 ~arm ~arm64 ~ppc ~x86"
 IUSE="X"
 
 RDEPEND="
