@@ -25,7 +25,7 @@ RDEPEND="
 		x11-apps/xhost
 		)"
 
-S="${WORKDIR}/rich0-cfg-update-${PV}"
+S="${WORKDIR}/cfg-update-${PV}"
 
 pkg_prerm() {
 	if [[ -z ${ROOT} ]]
