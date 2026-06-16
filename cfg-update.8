@@ -170,14 +170,14 @@ The modification checking method for stage1 comes from Naan Yaar's post on the G
 .LP
 But... when you install a new package, and an update for one of the configuration files is placed in a protected directory, it's too late to get the checksum for the current configuration file because the CONTENTS file is already updated by Portage and contains the checksum of the update!
 .LP
-The solution is very simple; a backup is created of all the checksums that Portage has stored in the CONTENTS files. I chose to write all checksums found in /var/db/pkg/*/* to a single file and add the timestamp of the last installed package as an indicator that new packages have been installed. (/usr/lib/cfg\-update/checksum.index) Creating this list only takes a couple of seconds even on an old Pentium. In earlier versions of cfg\-update the index was updated by using an alias for emerge. Newer versions use the /etc/portage/bashrc file with a hook for the ebuild setup phase.
+The solution is very simple; a backup is created of all the checksums that Portage has stored in the CONTENTS files. I chose to write all checksums found in /var/db/pkg/*/* to a single file and add the timestamp of the last installed package as an indicator that new packages have been installed. (/var/lib/cfg\-update/checksum.index) Creating this list only takes a couple of seconds even on an old Pentium. In earlier versions of cfg\-update the index was updated by using an alias for emerge. Newer versions use the /etc/portage/bashrc file with a hook for the ebuild setup phase.
 .LP
 This enables cfg\-update to update it's checksum index before one or more new packages are installed.  But updating the index can only be done when there are no updates in the protected directories. So once an update is found cfg\-update will not update the index until you have updated all your files.
 
 .SH "SEE ALSO"
 /etc/cfg-update.conf
 /etc/cfg-update.hosts
-http://people.zeelandnet.nl/xentric/
+https://github.com/rich0/cfg-update
 
 .SH "LICENSE"
 This program is free software. You can redistribute it and/or modify it under the terms of the GNU General Public License v2 as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but without ANY warranty, without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License v2 for more details.
@@ -185,7 +185,7 @@ This program is free software. You can redistribute it and/or modify it under th
 You should have received a copy of the GNU General Public License v2 along with this program. If not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111\-1307 USA
 
 .SH "REPORTING BUGS"
-Please report bugs via http://bugs.gentoo.org
+Please report bugs via https://github.com/rich0/cfg-update/issues
 
 .SH "AUTHOR"
 S. van Boven  <sboven@zeelandnet.nl>
