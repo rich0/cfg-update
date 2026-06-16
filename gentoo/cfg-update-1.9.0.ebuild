@@ -5,7 +5,7 @@
 # Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild:
 # https://gitweb.gentoo.org/repo/gentoo.git/tree/app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild
 # Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
-# Bump -r revision (or PV) here as refactor stages land; tag ${PV} on GitHub before release.
+# Keep PV at 1.9.0 until refactor completes; do not tag for release without maintainer approval.
 
 EAPI=8
 
@@ -47,10 +47,7 @@ pkg_postrm() {
 }
 
 src_install() {
-	dobin \
-		cfg-update emerge_with_indexing_for_cfg-update \
-		emerge_with_indexing_for_cfg-update_phphelper \
-		cfg-update_phphelper emerge_with_indexing_for_cfg-update_bashhelper
+	dobin cfg-update
 	insinto /usr/lib/cfg-update
 	doins cfg-update cfg-update_indexing test.tgz
 	dodoc ChangeLog
@@ -68,22 +65,6 @@ pkg_postinst() {
 		mv "${ROOT}"/usr/lib/cfg-update/checksum.index \
 			"${ROOT}"/var/lib/cfg-update/checksum.index
 		eend $?
-	fi
-
-	if [[ -e "${ROOT}"/usr/bin/paludis ]]
-	then
-		echo
-		ewarn "If you have used Paludis version <0.20.0 on your system, chances are"
-		ewarn "that you have some corrupted CONTENTS files on your system..."
-		echo
-		ewarn "Please run: cfg-update --check-packages"
-		echo
-		ewarn "The above command will check all packages installed with Paludis and"
-		ewarn "will output a list of packages that need to be re-installed with"
-		ewarn "Paludis 0.20.0 or higher. If you do not re-install these packages"
-		ewarn "you risk losing your custom settings when updating configuration"
-		ewarn "files, that belong to these packages, with cfg-update!"
-		echo
 	fi
 
 	if [[ -z ${ROOT} ]]

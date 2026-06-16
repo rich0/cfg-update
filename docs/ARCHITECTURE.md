@@ -94,7 +94,7 @@ pre_pkg_setup() {
 - If missing, it is appended
 - Disable on uninstall: `cfg-update --disable-portage-hook`
 
-This replaced the older approach of aliasing `emerge` in `/root/.bashrc`. The legacy wrapper scripts in this repo (`emerge_with_indexing_for_cfg-update*`, `cfg-update_phphelper`) are obsolete and scheduled for removal.
+This replaced the older approach of aliasing `emerge` in `/root/.bashrc`. The legacy emerge wrapper scripts and PHP helper were removed in stage 3.
 
 ## Paludis hook integration (optional)
 
