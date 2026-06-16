@@ -23,7 +23,7 @@ The repository has **no package-manager manifest** (no `package.json`, `cpanfile
 | [`cfg-update`](../cfg-update) | 2490 | Main Perl program (54 subroutines) | **Yes** — core |
 | [`cfg-update.conf`](../cfg-update.conf) | 167 | Config template (installed as `/etc/cfg-update.conf`) | **Yes** |
 | [`cfg-update.8`](../cfg-update.8) | 192 | Man page | **Yes** (update stale refs in stage 2) |
-| [`cfg-update.hosts`](../cfg-update.hosts) | 206 | sshfs remote-host HOWTO + mount definitions | **Deprecate** — not needed for single-host; keep code in stage 4 |
+| [`cfg-update.hosts`](../cfg-update.hosts) | ~40 | Legacy sshfs mount definitions | **Deprecated** (stage 4); HOWTO preserved at git tag 1.9.0 |
 | [`cfg-update_indexing`](../cfg-update_indexing) | 12 | Paludis hook script (copied to `/usr/share/paludis/hooks/...`) | **Yes** if Paludis kept |
 | ~~emerge wrappers / phphelper~~ | — | Legacy emerge alias wrappers | **Removed** (stage 3) |
 | [`ChangeLog`](../ChangeLog) | 235 | Gentoo ebuild changelog (historical) | **Yes** (historical) |
@@ -149,7 +149,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `tool_intro` | 2148 | User guidance per tool |
 | `diff_two_files`, `diff_three_files` | 2121–2148 | Ad-hoc diff mode |
 
-### Remote hosts / sshfs (deprecate, do not delete yet)
+### Remote hosts / sshfs (deprecated since 1.9.1, not deleted yet)
 
 | Subroutine | Lines | Purpose |
 |------------|------:|---------|
@@ -197,19 +197,13 @@ pre_pkg_setup() {
 **Disable:** `--disable-portage-hook` comments out the hook line.  
 **Status:** Active, correct for modern Portage. No repo file needed beyond the main script.
 
-### Paludis (optional — verify in stage 5)
+### Paludis (optional, best-effort — stage 5 complete)
 
 **Detection:** `/usr/bin/cave` exists (L493).  
 **Hook install:** Copies `/usr/lib/cfg-update/cfg-update_indexing` → `$paludis_hook`  
-**Default hook path:** `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` (L42)  
-**Hook script:** [`cfg-update_indexing`](../cfg-update_indexing) runs `cfg-update --index --paludis`  
-**ChangeLog discrepancy:** Historical entry mentions `install_pre_all/cfg-update_indexing.bash`; code uses `install_all_pre/cfg-update.bash`.
-
-| Check | Action for stage 5 |
-|-------|---------------------|
-| Does `/usr/bin/cave` still exist on Gentoo? | Document; Paludis is uncommon |
-| Is `install_all_pre` still valid? | Verify against Paludis docs; fix path if <30 LOC |
-| Does `--paludis` switch log to `/var/log/paludis.log`? | Keep; needed for index freshness |
+**Default hook path:** `/usr/share/paludis/hooks/install_all_pre/cfg-update.bash` — matches Paludis docs  
+**Hook script:** [`cfg-update_indexing`](../cfg-update_indexing) — hardened (no `PALUDIS_EBUILD_DIR`)  
+**Stage 5 fixes:** `find_masked_dirs` Paludis branch pushed to `@maskdir` (was `@dir`); not verified on live Paludis host
 
 ### Deprecated emerge wrappers (remove in stage 3)
 
@@ -343,7 +337,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | Backup/restore/optimize | **Yes** | Required for 3-way merge |
 | `-l`, `-u`, `-a`, `-p` | **Yes** | Daily usage |
 | Paludis hook + `--paludis` | **Yes** (minimal) | Low cost if path valid |
-| sshfs multi-host (`-h`, `--mount`) | **Deprecate** | Out of scope; warn in stage 4 |
+| sshfs multi-host (`-h`, `--mount`) | **Deprecated** | Runtime warnings since 1.9.1; removal TBD |
 | ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
 | ~~PHP helper~~ | — | Removed (stage 3) |
 | `--test` stub | **Repurpose** | Hook for automated smoke tests (stage 6) |
@@ -358,8 +352,8 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 |-------|--------|---------|
 | 2 | `refactor/stage-2-docs` | README, ARCHITECTURE.md, DEPENDENCIES.md; fix man page stale paths |
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
-| 4 | `refactor/stage-4-deprecations` | Runtime warning on `--mount`/`--check`/`--unmount`/`-h`; fix hosts HOWTO |
-| 5 | `refactor/stage-5-paludis` | Verify hook path; fix or document-only |
+| 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
+| 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
 | 6 | `refactor/stage-6-ci-renovate` | `perl -c`, shellcheck, extract test fixtures, `renovate.json` |
 
 ---

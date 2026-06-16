@@ -41,13 +41,13 @@ List backup files from previous updates. These backups are stored in /var/lib/cf
 Add a number from the \fB\-b\fP output to restore a specific file.
 .B
 .IP \-\-mount
-Mounts the remote hosts specified in /etc/cfg-update.hosts
+\fBDEPRECATED.\fR Mounts the remote hosts specified in /etc/cfg\-update.hosts. Multi\-host sshfs support will be removed in a future release; run cfg\-update on each host directly.
 .B
 .IP \-\-check
-Checks the remote hosts for problems and shows their status.
+\fBDEPRECATED.\fR Checks the remote hosts for problems and shows their status.
 .B
 .IP \-\-unmount
-Unmounts the remote hosts specified in /etc/cfg-update.hosts
+\fBDEPRECATED.\fR Unmounts the remote hosts specified in /etc/cfg\-update.hosts
 
 .SH "OPTIONS"
 .B
@@ -61,9 +61,7 @@ Force cfg\-update to only use the automatic stages (1,2) for updating. (only use
 Force cfg\-update to only use the manual stages (3,4,5) for updating. (only useful in combination with the \fB\-u\fP option)
 .B
 .IP \-h,\ \-\-host [x or x-y]
-Include sshfs mounted remote hosts (combine with \-l, \-u, \-b, \-r).
-Add the number of a specific host or a range for multiple hosts.
-For more information see: /etc/cfg-update.hosts
+\fBDEPRECATED.\fR Include sshfs mounted remote hosts (combine with \-l, \-u, \-b, \-r). Multi\-host updates from one machine are deprecated. For legacy configuration see: /etc/cfg\-update.hosts
 .B
 .IP \-p,\ \-\-pretend
 This option allows you to see what actions cfg\-update will take on the configuration files.
@@ -78,7 +76,7 @@ With this option cfg\-update will output tags when starting or finishing subrout
 .B
 .IP \-i,\ \-\-index
 Check the index and rebuild if new packages have been installed (--index is used in the hooks for Portage and Paludis).
-The hook for Paludis will add an extra option --paludis behind --index.
+The hook for Paludis will add an extra option --paludis behind --index. Paludis support is best\-effort and lightly tested; Portage is the primary supported package manager.
 .B
 .IP \-s,\ \-\-show\-protected\-dirs
 List all protected directories on your system.

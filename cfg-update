@@ -29,7 +29,7 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.8.2-r1";
+    my $version           = "1.9.1";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
     my $website           = "http://people.zeelandnet.nl/xentric";
@@ -219,6 +219,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $index_pkg = "";
     my $tab       = "";
     my $env       = " ";
+    my $sshfs_deprecation_warned = 0;
 
 ######################################################################################################################
 #                                          COMMANDLINE ARGUMENT HANDLING                                            #
@@ -340,6 +341,7 @@ $Term::ANSIColor::AUTORESET = 1;
                 if ($i > 0) { print "     $mount_point[$i]  "; }
                 &remote_host_checks("$mount_point[$i]",$i);
             }
+            if ($mount_first > 0 || $mount_last > 0) { &warn_sshfs_deprecated; }
         }
     }
 # Enable stages depending on -a or -m flag...
@@ -406,8 +408,8 @@ $Term::ANSIColor::AUTORESET = 1;
 # Go to runmode subroutine (optionally preceeded by checks) if a corresponding argument is found. Exit when done...
     if ($opt_test_code > 0)            { &test_code; exit; }
     if ($opt_help > 0)                 { &print_usage; exit; }
-    if ($opt_mount_hosts > 0)          { &root_only; &mount_hosts; exit;}
-    if ($opt_check_hosts > 0)          { &root_only; &check_hosts; exit;}
+    if ($opt_mount_hosts > 0)          { &root_only; &warn_sshfs_deprecated; &mount_hosts; exit;}
+    if ($opt_check_hosts > 0)          { &root_only; &warn_sshfs_deprecated; &check_hosts; exit;}
     if ($opt_s > 0)                    { &list_dirs; exit;}
     if ($opt_l > 0)                    { &list_updates; exit;}
     if ($opt_u > 0)                    { &root_only; &update_files; exit; }
@@ -417,7 +419,7 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
     if ($opt_move_backups > 0)         { &root_only; &move_backups; exit; }
     if ($opt_optimize_backups > 0)     { &root_only; &optimize_backups; exit; }
-    if ($opt_unmount_hosts > 0)        { &root_only; &unmount_hosts; exit;}
+    if ($opt_unmount_hosts > 0)        { &root_only; &warn_sshfs_deprecated; &unmount_hosts; exit;}
 # If none of the above options are used, check for undocumented usage modes (2-way and 3-way diff mode)
     if ((@ARGV == 2) && (-f $ARGV[0]) && (-f $ARGV[1]))                  { &root_only; &diff_two_files; exit;   } # Simply parsing two files to diff/merge tool
     if ((@ARGV == 3) && (-f $ARGV[0]) && (-f $ARGV[1]) && (-f $ARGV[2])) { &root_only; &diff_three_files; exit; } # Simply parsing three files to diff/merge tool
@@ -493,9 +495,9 @@ sub check_hooks {
     if (-e "/usr/bin/cave") {
         my $hook_dir = dirname($paludis_hook);
         if (!-d "$hook_dir") {
-            print "$tab"."Paludis hook directory $hook_dir not found...\n";
-            print "$tab"."Can't enable Paludis hook...\n";
-            print "$tab"."Make sure that Paludis is installed properly first!\n";
+            if ($opt_v >= 1) {
+                print "$tab"."Paludis hook directory $hook_dir not found (Paludis support is best-effort)...\n";
+            }
         } else {
             if (!-f "$paludis_hook") {
                 &root_only("Can't enable the Paludis hook if you're not root...");
@@ -905,12 +907,15 @@ sub find_masked_dirs{
         @maskdir = grep { ! $seen{$_} ++ } @sdir;                         # move unique elements from @sdir back to @dir (removes doubles)
     }
     if ($pkg_manager =~ /^paludis$/i) {
-        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT_MASK") || die "Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT!\n";
+        open(FILE, "$pkg_db/.cache/all_CONFIG_PROTECT_MASK") || die "Can't open file: $pkg_db/.cache/all_CONFIG_PROTECT_MASK!\n";
         while (my $line = <FILE>) {
             chomp $line;
-            if (-e $line) { push(@dir, $line); }                          # ignore non-existant directories but push existing dirs into array
+            if (-e $line) { push(@maskdir, $line); }
         }
         close(FILE);
+        my @sdir = sort {lc($a) cmp lc($b)} @maskdir;
+        %seen = ();
+        @maskdir = grep { ! $seen{$_} ++ } @sdir;
     }
     if (@maskdir == 0) { print "$tab"."No masked directories found...\n"; }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_masked_dirs>\n"; }
@@ -2215,6 +2220,15 @@ sub tool_intro{ #ARGS# ("mergetoolname")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</tool_intro>\n"; }
 }
 
+sub warn_sshfs_deprecated {
+    return if $sshfs_deprecation_warned;
+    $sshfs_deprecation_warned = 1;
+    print "\n";
+    print BOLD YELLOW "$tab"."WARNING: sshfs multi-host support is deprecated and will be removed in a future release.\n";
+    print BOLD YELLOW "$tab"."Run cfg-update on each host directly instead. See $hosts_file and the project README.\n";
+    print "\n";
+}
+
 sub show_warning{
     if ($opt_d >= 1) { print "$tab"."<show_warning>\n"; $tab = $tab."    "; }
 # 80 chars            ________________________________________________________________________________
@@ -2301,13 +2315,13 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."                    $progname -r10 -h1   : restore backup 10 on remote host 1\n";
         print "$tab"."\n";
         print "$tab"."  --mount\n";
-        print "$tab"."          Mounts the remote hosts specified in $hosts_file\n";
+        print "$tab"."          [DEPRECATED] Mounts remote hosts specified in $hosts_file\n";
         print "$tab"."\n";
         print "$tab"."  --check\n";
-        print "$tab"."          Checks the remote hosts for problems and shows their status\n";
+        print "$tab"."          [DEPRECATED] Checks remote hosts for problems and shows their status\n";
         print "$tab"."\n";
         print "$tab"."  --unmount\n";
-        print "$tab"."          Unmounts the remote hosts specified in $hosts_file\n";
+        print "$tab"."          [DEPRECATED] Unmounts remote hosts specified in $hosts_file\n";
         print "$tab"."\n";
         print "$tab"."OPTIONS\n";
         print "$tab"."  -a, --automatic-only\n";
@@ -2317,11 +2331,9 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."          Skips all automatic updates\n";
         print "$tab"."\n";
         print "$tab"."  -h [x|x-y], --host [x|x-y]\n";
-        print "$tab"."          Includes sshfs mounted remote hosts (combine with -u, -l, -b, -r)\n";
-        print "$tab"."          With this option you can perform updates on multiple remote machines\n";
-        print "$tab"."          from a single location. Listing updates, updating, listing backups\n";
-        print "$tab"."          and restoring backups on remote machines are all possible.\n";
-        print "$tab"."          For configuration info see: $hosts_file\n";
+        print "$tab"."          [DEPRECATED] Includes sshfs-mounted remote hosts (combine with -u, -l, -b, -r)\n";
+        print "$tab"."          Multi-host updates from one machine are deprecated; use cfg-update per host.\n";
+        print "$tab"."          For legacy configuration see: $hosts_file\n";
         print "$tab"."\n";
         print "$tab"."  -t [tool], --tool [tool]\n";
         print "$tab"."          Set mergetool, overrides the default setting in $settings\n";
@@ -2343,8 +2355,8 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."          The index is neccesary for determining which files can be updated\n";
         print "$tab"."          automatically. The index needs to be updated before installing new\n";
         print "$tab"."          packages. A hook will be created in $portage_hook so you don't\n";
-        print "$tab"."          have to do this manually. When Paludis is installed, $progname will\n";
-        print "$tab"."          add a hook to $paludis_hook\n";
+        print "$tab"."          have to do this manually. When Paludis (cave) is installed, $progname\n";
+        print "$tab"."          will add a hook to $paludis_hook (best-effort, lightly tested).\n";
         print "$tab"."          The Portage hook will execute: $progname --index\n";
         print "$tab"."          The Paludis hook will execute: $progname --index --paludis\n";
         print "$tab"."\n";

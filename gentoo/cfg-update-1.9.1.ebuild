@@ -1,11 +1,10 @@
 # Copyright 1999-2025 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 #
-# Fork development ebuild (PV 1.9.0 placeholder until refactor completes).
-# Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild:
-# https://gitweb.gentoo.org/repo/gentoo.git/tree/app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild
+# Fork development ebuild. Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild.
 # Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
-# Keep PV at 1.9.0 until refactor completes; do not tag for release without maintainer approval.
+# PV 1.9.0 is tagged; 1.9.1 is the current development line — do not tag without approval.
+# Stage 5: Paludis maskdir fix, hardened install_all_pre hook script.
 
 EAPI=8
 
@@ -59,7 +58,7 @@ src_install() {
 
 pkg_postinst() {
 	if [[ ! -e "${ROOT}"/var/lib/cfg-update/checksum.index \
-		&& -e "${ROOT}"/var/lib/cfg-update/checksum.index ]]
+		&& -e "${ROOT}"/usr/lib/cfg-update/checksum.index ]]
 	then
 		ebegin "Moving checksum.index from /usr/lib/cfg-update to /var/lib/cfg-update"
 		mv "${ROOT}"/usr/lib/cfg-update/checksum.index \
@@ -81,7 +80,7 @@ pkg_postinst() {
 	einfo "If your system does not have an X-server installed you need to"
 	einfo "change the MERGE_TOOL to sdiff, imediff2 or vimdiff."
 	einfo "If you have X installed, set MERGE_TOOL to your favorite GUI tool:"
-	einfo "xxdiff, beediff, kdiff3, meld (default), gtkdiff, gvimdiff, tkdiff"
+	einfo "meld (default), kdiff3, gtkdiff, gvimdiff, tkdiff, imediff2"
 	echo
 	einfo "TIP: to maximize the chances of future automatic updates, run:"
 	einfo "cfg-update --optimize-backups"

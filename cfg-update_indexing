@@ -1,12 +1,9 @@
 #!/bin/bash
-source ${PALUDIS_EBUILD_DIR}/echo_functions.bash
-
-einfo "cfg-update:"
-
-if [ -e "/usr/bin/cfg-update" ]; then
-    cfg-update --index --paludis
+# Paludis install_all_pre hook (general hook — no ebuild environment available).
+if [ -x "/usr/bin/cfg-update" ]; then
+    /usr/bin/cfg-update --index --paludis
+elif [ -e "/usr/bin/cfg-update" ]; then
+    echo ">>> cfg-update: not executable, please fix permissions on /usr/bin/cfg-update" >&2
 else
-    ewarn "cfg-update not found, please remove $0"
+    echo ">>> cfg-update: not found, please remove $0" >&2
 fi
-
-
