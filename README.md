@@ -1,3 +1,11 @@
+# DISCLAIMER / WARNING
+
+I'm in the process of using an LLM to clean up some of the dead code branches here.
+I'm being conservative, but please use care before using the 1.9.0+ releases.  
+Feedback is welcome.  Eventually I might port this to python, but the initial focus is on trimming
+some of the features like sshfs that nobody uses.  A few obvious bugs were fixed, as well as 
+dilfridge's patch.
+
 # cfg-update
 
 A safe, staged alternative to Gentoo's `etc-update` for handling configuration file updates after package merges.
