@@ -25,10 +25,7 @@ The repository has **no package-manager manifest** (no `package.json`, `cpanfile
 | [`cfg-update.8`](../cfg-update.8) | 192 | Man page | **Yes** (update stale refs in stage 2) |
 | [`cfg-update.hosts`](../cfg-update.hosts) | 206 | sshfs remote-host HOWTO + mount definitions | **Deprecate** — not needed for single-host; keep code in stage 4 |
 | [`cfg-update_indexing`](../cfg-update_indexing) | 12 | Paludis hook script (copied to `/usr/share/paludis/hooks/...`) | **Yes** if Paludis kept |
-| [`emerge_with_indexing_for_cfg-update`](../emerge_with_indexing_for_cfg-update) | 7 | Legacy emerge alias wrapper | **Remove candidate** — superseded by Portage bashrc hook |
-| [`emerge_with_indexing_for_cfg-update_bashhelper`](../emerge_with_indexing_for_cfg-update_bashhelper) | 37 | Bash emerge wrapper with flag blacklist | **Remove candidate** — superseded |
-| [`emerge_with_indexing_for_cfg-update_phphelper`](../emerge_with_indexing_for_cfg-update_phphelper) | 14 | Bash wrapper calling PHP helper | **Remove candidate** — superseded |
-| [`cfg-update_phphelper`](../cfg-update_phphelper) | 110 | PHP emerge flag filter + index trigger | **Remove candidate** — superseded |
+| ~~emerge wrappers / phphelper~~ | — | Legacy emerge alias wrappers | **Removed** (stage 3) |
 | [`ChangeLog`](../ChangeLog) | 235 | Gentoo ebuild changelog (historical) | **Yes** (historical) |
 | [`COPYING`](../COPYING) | — | GPL v2 | **Yes** |
 | [`test.tgz`](../test.tgz) | — | Fixture tree for manual testing | **Yes** — valuable for future CI/tests |
@@ -177,13 +174,10 @@ Remote host arrays (`@mount_point`, `@mount_cmd`, `@unmount_cmd`) are loaded at 
 
 | Subroutine / artifact | Evidence | Recommendation |
 |-----------------------|----------|----------------|
-| `breakpoint` (L2474) | **Zero call sites** in repo | **Remove** in stage 3 |
+| ~~`breakpoint`~~ | Zero call sites | **Removed** (stage 3) |
 | `test_code` (L435) | Stub prints "Nothing to test..."; only called by `--test` | **Repurpose** for smoke tests in stage 6, or remove flag |
-| `emerge_with_indexing_for_cfg-update` | Superseded by `check_hooks` → `/etc/portage/bashrc` | **Remove** in stage 3 |
-| `emerge_with_indexing_for_cfg-update_bashhelper` | Same; not referenced by main script | **Remove** in stage 3 |
-| `emerge_with_indexing_for_cfg-update_phphelper` | Same | **Remove** in stage 3 |
-| `cfg-update_phphelper` | Only called by phphelper bash wrapper | **Remove** in stage 3 (with wrappers) |
-| Stale `.bashrc` error messages | Lines in wrappers + phphelper L104; hooks replaced this in 2007 | **Update messages** in stage 3 |
+| ~~emerge wrappers / phphelper~~ | Superseded by Portage bashrc hook | **Removed** (stage 3) |
+| Stale hook/merge messages in `cfg-update` | xxdiff defaults, "alias" wording | **Fixed** (stage 3) |
 
 ---
 
@@ -219,16 +213,7 @@ pre_pkg_setup() {
 
 ### Deprecated emerge wrappers (remove in stage 3)
 
-These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-2007). The Portage bashrc hook made them obsolete.
-
-| File | Behavior |
-|------|----------|
-| `emerge_with_indexing_for_cfg-update` | Always runs `cfg-update --index` then `emerge $*` |
-| `emerge_with_indexing_for_cfg-update_bashhelper` | Skips index on read-only emerge flags (`-p`, `-s`, etc.) |
-| `emerge_with_indexing_for_cfg-update_phphelper` | Delegates to PHP helper |
-| `cfg-update_phphelper` | PHP flag blacklist; calls `cfg-update --index` |
-
-**Grep evidence:** None of these filenames appear in [`cfg-update`](../cfg-update) except ChangeLog references.
+These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-2007). The Portage bashrc hook made them obsolete. **Removed in stage 3.**
 
 ---
 
@@ -359,10 +344,10 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | `-l`, `-u`, `-a`, `-p` | **Yes** | Daily usage |
 | Paludis hook + `--paludis` | **Yes** (minimal) | Low cost if path valid |
 | sshfs multi-host (`-h`, `--mount`) | **Deprecate** | Out of scope; warn in stage 4 |
-| emerge wrapper scripts | **No** | Dead installation path |
-| PHP helper | **No** | Dead installation path |
-| `--test` stub | **Repurpose** | Hook for automated smoke tests |
-| `breakpoint` subroutine | **No** | Uncalled dead code |
+| ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
+| ~~PHP helper~~ | — | Removed (stage 3) |
+| `--test` stub | **Repurpose** | Hook for automated smoke tests (stage 6) |
+| ~~`breakpoint` subroutine~~ | — | Removed (stage 3) |
 | `test_code` empty stub | **Repurpose/remove** | No value today |
 
 ---
@@ -372,7 +357,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | Stage | Branch | Actions |
 |-------|--------|---------|
 | 2 | `refactor/stage-2-docs` | README, ARCHITECTURE.md, DEPENDENCIES.md; fix man page stale paths |
-| 3 | `refactor/stage-3-dead-code` | Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text; align code default merge tool |
+| 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | Runtime warning on `--mount`/`--check`/`--unmount`/`-h`; fix hosts HOWTO |
 | 5 | `refactor/stage-5-paludis` | Verify hook path; fix or document-only |
 | 6 | `refactor/stage-6-ci-renovate` | `perl -c`, shellcheck, extract test fixtures, `renovate.json` |

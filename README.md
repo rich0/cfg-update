@@ -107,7 +107,7 @@ man cfg-update             # detailed manual
 
 This fork is being revived on isolated `refactor/stage-*` branches. See [docs/INVENTORY.md](docs/INVENTORY.md) for the cleanup roadmap.
 
-The vendored ebuild in [`gentoo/`](gentoo/) uses **1.9.0** as a placeholder PV until the refactor finishes; bump `-r` (or the ebuild) as changes land, and tag `${PV}` on GitHub before release.
+The vendored ebuild in [`gentoo/`](gentoo/) uses **1.9.0** as a placeholder PV until the refactor finishes. Do not tag for release without maintainer approval.
 
 ```bash
 # Validate Perl syntax

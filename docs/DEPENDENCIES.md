@@ -102,14 +102,6 @@ Only needed if you use Paludis instead of (or alongside) Portage:
 
 Not required for single-host use. This feature is deprecated.
 
-### PHP (legacy, scheduled for removal)
-
-| Package | Purpose |
-|---------|---------|
-| `dev-lang/php` | Only used by `cfg-update_phphelper` |
-
-The PHP helper and emerge wrapper scripts are obsolete. The Portage bashrc hook replaced them. These files will be removed in stage 3 of the refactor.
-
 ## Dependency tracking and Renovate
 
 This project has no machine-readable dependency manifest today. Automated update tooling applies only to:

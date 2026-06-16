@@ -40,8 +40,8 @@ $Term::ANSIColor::AUTORESET = 1;
     my $pkg_db            = "/var/db/pkg";
     my $portage_hook      = "/etc/portage/bashrc";
     my $paludis_hook      = "/usr/share/paludis/hooks/install_all_pre/cfg-update.bash";
-    my $merge_tool        = "/usr/bin/xxdiff";
-    my $merge_tool_name   = "xxdiff";
+    my $merge_tool        = "/usr/bin/meld";
+    my $merge_tool_name   = "meld";
     my $view_tool         = "less";
     my $xxdiff_style      = "--style Keramik";
     my $backup_path       = "/var/lib/cfg-update/backups";
@@ -632,8 +632,8 @@ sub check_tool{
         print "\n";
         print "$tab"."**********************************************************************\n";
         print "$tab"."Mergetool \"$merge_tool\" not found...\n";
-        print "$tab"."The recommended merge tool for $progname is xxdiff, a nice GUI tool.\n\n";
-        print BOLD YELLOW "$tab"."Please install dev-util/xxdiff or change the MERGE_TOOL variable to\n";
+        print "$tab"."The recommended merge tool for $progname is meld, a nice GUI tool.\n\n";
+        print BOLD YELLOW "$tab"."Please install dev-util/meld or change the MERGE_TOOL variable to\n";
         print BOLD YELLOW "$tab"."your own favorite tool. See $settings for more details!\n";
         print "$tab"."**********************************************************************\n";
         print "\n";
@@ -2101,7 +2101,7 @@ sub disable_portage_hook { #RUNMODE# --disable-portage-hook
             if ($opt_ebuild == 0) { print "$tab"."  No hook found in $portage_hook...\n"; }
         }
     } else {
-        if ($opt_ebuild == 0) { print "$tab"."  $portage_hook does not exist, no need to disable the alias...\n"; }
+        if ($opt_ebuild == 0) { print "$tab"."  $portage_hook does not exist, no need to disable the hook...\n"; }
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</disable_portage_hook>\n"; }
 }
@@ -2469,22 +2469,4 @@ sub show_debug_info {
             print "$tab"."mount_point[$x]           = \"$mount_point[$x]\"\n";
         }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</show_debug_info>\n"; }
-}
-
-sub breakpoint { #ARGS# ("variable-1,variable-2,..")
-    if ($opt_d >= 1) { print "$tab"."<breakpoint>\n"; $tab = $tab."    "; }
-    print "$tab"."\n";
-    print "$tab"."$bar2\n";
-    print "$tab"."Breakpoint...\n";
-    for (my $i=0; $i<@_; ++$i) {                             # show contents of variable-1,variable-2,..
-        print "$tab"."   value $i = $_[$i]\n";
-    }
-    print "$tab"."Press [q] to quit or another key to continue...  ";
-    ReadMode 4; # Turn off controls keys
-    my $key = ReadKey 0;
-    ReadMode 0; # Reset tty mode
-    print "$tab"."\n";                                       #
-    print "$tab"."$bar2\n";
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</breakpoint>\n"; }
-    if ($key =~ /q/) { exit; }
 }
