@@ -149,6 +149,12 @@ write_test_config() {
         s3=no s4=no s5=no
     elif [[ "$stages" == "manual" ]]; then
         s1=no s2=no
+    elif [[ "$stages" == "stage3_only" ]]; then
+        s1=no s2=no s4=no s5=no
+    elif [[ "$stages" == "stage4_only" ]]; then
+        s1=no s2=no s3=no s5=no
+    elif [[ "$stages" == "stage5_only" ]]; then
+        s1=no s2=no s3=no s4=no
     fi
     cat >"$conf" <<EOF
 MERGE_TOOL = $merge_tool
@@ -230,6 +236,63 @@ run_cfg_update_stdin() {
     shift
     local extra_args=("$@")
     printf '%b' "$keys" | run_cfg_update "${extra_args[@]}"
+}
+
+install_mock_kdiff3() {
+    local golden_merge="${1:-}"
+    cat >"$SANDBOX/bin/kdiff3" <<'EOF'
+#!/bin/bash
+log="${CFG_UPDATE_TEST_SANDBOX}/mock-kdiff3.log"
+echo "$*" >>"$log"
+outfile=""
+ancestor=""
+threeway="no"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) outfile="$2"; shift 2 ;;
+        -b) ancestor="$2"; threeway="yes"; shift 2 ;;
+        -m) shift ;;
+        *) shift ;;
+    esac
+done
+echo "THREE_WAY=$threeway" >>"$log"
+if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
+    cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
+fi
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/kdiff3"
+    if [[ -n "$golden_merge" ]]; then
+        cp "$golden_merge" "$SANDBOX/golden.merge"
+    fi
+}
+
+assert_stage_output() {
+    local desc="$1" stage="$2" output="$3"
+    assert_output_matches "$desc: stage banner" \
+        "<< Stage${stage} >>" "$output"
+    case "$stage" in
+        3)
+            assert_output_matches "$desc: 3-way merge mode" \
+                'manual 3-way merging, starting' "$output"
+            assert_output_not_matches "$desc: not 2-way mode" \
+                'manual 2-way merging, starting' "$output"
+            ;;
+        4)
+            assert_output_matches "$desc: 2-way merge mode" \
+                'manual 2-way merging, starting' "$output"
+            assert_output_not_matches "$desc: not 3-way mode" \
+                'manual 3-way merging, starting' "$output"
+            ;;
+        5)
+            assert_output_matches "$desc: manual update mode" \
+                'manual updating, starting' "$output"
+            assert_output_not_matches "$desc: not 3-way mode" \
+                'manual 3-way merging, starting' "$output"
+            assert_output_not_matches "$desc: not 2-way mode" \
+                'manual 2-way merging, starting' "$output"
+            ;;
+    esac
 }
 
 remap_sandbox_paths() {
@@ -551,19 +614,38 @@ tier_c_execute_auto() {
 }
 
 tier_d_execute_manual() {
-    echo "=== Tier D: execute manual (-mu, stdin) ==="
+    echo "=== Tier D: execute manual (-u, stage-isolated, stdin) ==="
+    local output
 
-    setup_sandbox stage2-3way-merge-conflict auto
-    run_cfg_update -au >/dev/null
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    # Stage 3: replace path (MF + ancestor, no stage 4/5)
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage3 conflict replace" 3 "$output"
     assert_file_equals "stage3 conflict replace matches golden" \
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
     assert_missing "stage3 conflict replace removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_auto_3way_conflict"
 
-    setup_sandbox stage4-manual-2way manual
-    run_cfg_update_stdin $'1\n1\n' -mu >/dev/null
+    # Stage 3: mock kdiff3 must receive 3-way (-b ancestor) invocation
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    install_mock_kdiff3 \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update_stdin $'y\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage3 conflict mock merge" 3 "$output"
+    assert_file_contains "stage3 mock kdiff3 used 3-way merge" \
+        "$SANDBOX/mock-kdiff3.log" "THREE_WAY=yes"
+    assert_file_equals "stage3 mock merge matches golden" \
+        "$SANDBOX/etc/test/test_auto_3way_conflict" \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+
+    # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)
+    setup_sandbox stage4-manual-2way stage4_only
+    output="$(run_cfg_update_stdin $'1\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage4 manual replace" 4 "$output"
+    assert_output_matches "stage4 switches diff3 to sdiff" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
     assert_file_equals "stage4 manual replace matches golden" \
         "$SANDBOX/etc/test/test_manual_2way" \
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
@@ -572,8 +654,9 @@ tier_d_execute_manual() {
     assert_missing "stage4 manual replace removed cfg0001 marker" \
         "$SANDBOX/etc/test/._cfg0001_test_manual_2way"
 
-    setup_sandbox stage4-manual-2way manual
-    run_cfg_update_stdin $'2\n2\n' -mu >/dev/null
+    setup_sandbox stage4-manual-2way stage4_only
+    output="$(run_cfg_update_stdin $'2\n2\n' -u 2>&1)" || true
+    assert_stage_output "stage4 manual keep" 4 "$output"
     assert_file_equals "stage4 manual keep matches golden" \
         "$SANDBOX/etc/test/test_manual_2way" \
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way.keep"
@@ -582,47 +665,58 @@ tier_d_execute_manual() {
     assert_missing "stage4 manual keep removed cfg0001 marker" \
         "$SANDBOX/etc/test/._cfg0001_test_manual_2way"
 
-    setup_sandbox stage4-custom-file manual
-    run_cfg_update_stdin $'2\n' -mu >/dev/null
+    setup_sandbox stage4-custom-file stage4_only
+    output="$(run_cfg_update_stdin $'2\n' -u 2>&1)" || true
+    assert_stage_output "stage4 custom keep" 4 "$output"
     assert_file_equals "stage4 custom keep matches golden" \
         "$SANDBOX/etc/test/test_custom_file" \
         "$FIXTURES/stage4-custom-file/expected/test_custom_file"
     assert_missing "stage4 custom keep removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_custom_file"
 
-    setup_sandbox stage5-modified-binary manual
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    # Stage 5: binaries and symlinks (must not run stage 3/4 merge handlers)
+    setup_sandbox stage5-modified-binary stage5_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage5 modified binary replace" 5 "$output"
+    assert_output_matches "stage5 binary uses non-merge prompt" \
+        'cannot be done with the diff/merge tool' "$output"
+    assert_output_not_matches "stage5 binary not offered merge tool" \
+        'to merge the current file and the ._cfg0000_' "$output"
     assert_file_equals "stage5 modified binary replace matches golden" \
         "$SANDBOX/etc/test/test_modified_binary" \
         "$FIXTURES/stage5-modified-binary/expected/test_modified_binary"
     assert_missing "stage5 modified binary removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_modified_binary"
 
-    setup_sandbox stage5-custom-binary manual
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    setup_sandbox stage5-custom-binary stage5_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage5 custom binary replace" 5 "$output"
     assert_file_equals "stage5 custom binary replace matches golden" \
         "$SANDBOX/etc/test/test_custom_binary" \
         "$FIXTURES/stage5-custom-binary/expected/test_custom_binary"
     assert_missing "stage5 custom binary removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_custom_binary"
 
-    setup_sandbox stage5-file-to-link manual
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    setup_sandbox stage5-file-to-link stage5_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage5 file-to-link replace" 5 "$output"
     assert_symlink "stage5 file-to-link replace is symlink" \
         "link_target_after_update" "$SANDBOX/etc/test/test_file_2_link"
     assert_missing "stage5 file-to-link removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_file_2_link"
 
-    setup_sandbox stage5-link-to-file manual
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    setup_sandbox stage5-link-to-file stage5_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage5 link-to-file replace" 5 "$output"
     assert_file_equals "stage5 link-to-file replace matches golden" \
         "$SANDBOX/etc/test/test_link_2_file" \
         "$FIXTURES/stage5-link-to-file/expected/test_link_2_file"
     assert_missing "stage5 link-to-file removed cfg marker" \
         "$SANDBOX/etc/test/._cfg0000_test_link_2_file"
 
-    setup_sandbox stage5-link-to-link manual
-    run_cfg_update_stdin $'1\n' -mu >/dev/null
+    setup_sandbox stage5-link-to-link stage5_only
+    output="$(run_cfg_update_stdin $'1\n' -u 2>&1)" || true
+    assert_stage_output "stage5 link-to-link replace" 5 "$output"
     assert_symlink "stage5 link-to-link replace is symlink" \
         "link_target_after_update" "$SANDBOX/etc/test/test_link_2_link"
     assert_missing "stage5 link-to-link removed cfg marker" \

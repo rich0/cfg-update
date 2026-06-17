@@ -59,14 +59,14 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
-| D | `-mu` + stdin | Stages 3–5 execute: replace/keep filesystem outcomes (non-interactive via sandbox STDIN) |
+| D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
 | E | `-i` / `-i -f` | Portage `--index`: up-to-date skip, stale rebuild from mock CONTENTS, marker-blocked skip, force rebuild |
 
 Tier B/C/D/E pass `--testsandbox` with `--ebuild` so `-u` and `--index` skip the root check inside the temp sandbox.
 
 ### Golden `expected/` files
 
-Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`; Tier D drives manual stages by piping keys to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
+Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses a mock `kdiff3` to verify 3-way merge invocation. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
 
 The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 
