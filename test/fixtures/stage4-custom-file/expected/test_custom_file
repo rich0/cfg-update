@@ -1,0 +1,4 @@
+#version 1.0
+#this file was not installed by Portage, it was created by a script when first running program X
+
+SETTING = default # contains a default value chosen by the developer
