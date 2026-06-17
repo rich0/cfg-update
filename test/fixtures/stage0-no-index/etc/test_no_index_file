@@ -1,0 +1,3 @@
+#version 1.0
+
+SETTING = default # contains a default value chosen by the developer

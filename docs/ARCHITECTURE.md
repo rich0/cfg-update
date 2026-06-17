@@ -134,7 +134,7 @@ Recursively scans `CONFIG_PROTECT` directories for files matching `._cfg????_*` 
 
 ### State classification (`determine_state`)
 
-Compares the live file, the `._cfg*` update, and the checksum index:
+Compares the live file, the `._cfg*` update, and the checksum index. Code uses `STATE_*` constants (e.g. `STATE_MF`) with human-readable labels from `%STATE_DESC`:
 
 | Code | Meaning | Typical stages |
 |------|---------|------------------|

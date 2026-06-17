@@ -195,6 +195,7 @@ EOF
     if [[ "$mode" == "all" ]]; then
         for scenario in "$FIXTURES"/stage*/; do
             [[ -d "$scenario/etc" ]] || continue
+            [[ "$(basename "$scenario")" == "stage0-no-index" ]] && continue
             cp -a "$scenario/etc/." "$SANDBOX/etc/test/"
             deploy_backups "$scenario"
         done
@@ -221,6 +222,14 @@ EOF
         "$SANDBOX/var/lib/cfg-update/backups" \
         "$stages" \
         "$merge_tool"
+}
+
+setup_sandbox_no_index() {
+    local scenario="${1:-stage0-no-index}"
+    setup_sandbox "$scenario"
+    rm -f "$SANDBOX/var/lib/cfg-update/checksum.index"
+    assert_missing "no-index sandbox removed checksum.index" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index"
 }
 
 run_cfg_update() {
@@ -559,6 +568,23 @@ tier_a_per_scenario() {
         'Stage\[5\][[:space:]]+Link to Link[[:space:]].*_cfg0000_test_link_2_link' "$output"
 }
 
+tier_a_no_index() {
+    echo "=== Tier A: missing checksum index (no-index) ==="
+    local output
+
+    setup_sandbox_no_index stage0-no-index
+    output="$(run_cfg_update -d -lv 2>&1)" || true
+    assert_output_matches "no-index: debug shows unknown state" \
+        'State of the current file : No index found' "$output"
+    assert_output_not_matches "no-index: marker not routed to any stage" \
+        'Stage\[[1-5]\][[:space:]].*_cfg0000_test_no_index_file' "$output"
+
+    setup_sandbox_no_index stage0-no-index
+    output="$(run_cfg_update -au 2>&1)" || true
+    assert_output_matches "no-index: stage1 skips when index absent" \
+        '<< Stage1 >>.*not found, skipping' "$output"
+}
+
 tier_a_protected_dirs() {
     echo "=== Tier A: protected dirs (-s) ==="
     setup_sandbox all
@@ -844,6 +870,7 @@ main() {
     tier0_lint_fixtures
     tier_a_classify_combined
     tier_a_per_scenario
+    tier_a_no_index
     tier_a_protected_dirs
     tier_a_ancestor_backups
     tier_b_pretend_auto

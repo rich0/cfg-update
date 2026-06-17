@@ -18,6 +18,7 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 
 | Directory | State | Stage | Summary |
 |-----------|-------|-------|---------|
+| [`stage0-no-index`](fixtures/stage0-no-index/) | `--` | — | No `checksum.index` on disk; unknown state (Tier A only, not in combined sandbox) |
 | [`stage1-unmodified-text`](fixtures/stage1-unmodified-text/) | UF | 1 | Live file matches index MD5; auto-replace |
 | [`stage1-unmodified-binary`](fixtures/stage1-unmodified-binary/) | UB | 1 | Unmodified binary; auto-replace |
 | [`stage2-3way-merge-success`](fixtures/stage2-3way-merge-success/) | MF | 2 | Modified file + ancestor backup; diff3 merges cleanly |
@@ -56,7 +57,7 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | Tier | What | Checks |
 |------|------|--------|
 | 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
-| A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
+| A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), missing-index case, protected dirs, ancestor backups on disk |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
