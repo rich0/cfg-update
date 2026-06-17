@@ -360,7 +360,7 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
 | 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
-| 6 | `refactor/stage-6-tests` | ~~Extract fixtures to scenario subdirs~~ **In progress**; harness, `CFG_UPDATE_CONF`; CI/Renovate deferred |
+| 6 | `refactor/stage-6-tests` | ~~Fixtures, harness, `CFG_UPDATE_CONF`~~ **In progress**; validate on Gentoo; CI/Renovate deferred |
 
 ---
 

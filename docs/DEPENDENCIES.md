@@ -108,7 +108,7 @@ This project has no machine-readable dependency manifest today. Automated update
 
 | Ecosystem | Status | Action |
 |-----------|--------|--------|
-| GitHub Actions | Planned (stage 6) | `renovate.json` with `github-actions` manager |
+| GitHub Actions | Deferred (after CI) | `renovate.json` with `github-actions` manager |
 | CPAN / Perl | Optional future | Add `cpanfile` to enable Renovate `cpan` manager |
 | Gentoo packages | Manual | Track versions here; revisit when ebuild is restored |
 | System binaries | Manual | No lockfile possible |

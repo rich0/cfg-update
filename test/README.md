@@ -7,7 +7,7 @@ The original archive kept every file in a flat `test/` directory. The layout her
 | Path within a scenario | Deployed to (sandbox) |
 |------------------------|------------------------|
 | `etc/*` | `{sandbox}/etc/test/` |
-| `backups/etc/test/*` | `{sandbox}/var/lib/cfg-update/backups/etc/test/` |
+| `backups/etc/test/*` | `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/` |
 | `checksum.index.entry` | Line appended to `{sandbox}/var/lib/cfg-update/checksum.index` |
 
 Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.index.seed) for a full index, or use per-scenario entries when testing in isolation.
@@ -34,12 +34,34 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 
 ## Running tests
 
-A full integration harness (`test/run-tests.sh`) is planned as part of stage 6. Until then, on a Gentoo host with cfg-update installed:
+Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` (no writes to `/etc`).
+
+**Requirements:** Perl (`Term::ANSIColor`, `Term::ReadKey`), `diff3`, `grep`, `find`.
 
 ```bash
-# Example: deploy one scenario manually (requires root)
+# From repo root — Tier A only (no root)
+./test/run-tests.sh
+
+# Full suite including auto-update execute tests (Tier B/C)
+sudo ./test/run-tests.sh
+
+# Or via cfg-update --test (same harness)
+./cfg-update --test
+```
+
+| Tier | Flags | Privilege | Checks |
+|------|-------|-----------|--------|
+| A | `-lv` | user | All fixtures classified to expected stage |
+| B | `-p -au` | root | Stages 1–2 pretend; files unchanged |
+| C | `-au` | root | Stage 1 replace + stage 2 diff3 merge |
+
+The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
+
+### Manual single-scenario check (Gentoo host)
+
+```bash
 SCENARIO=test/fixtures/stage1-unmodified-text
-cp -a "$SCENARIO/etc/"* /etc/test/
-# seed index/backups per scenario docs, then:
-cfg-update -l
+sudo cp -a "$SCENARIO/etc/." /etc/test/
+# seed index/backups per scenario.md, then:
+cfg-update -lv
 ```

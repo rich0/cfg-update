@@ -1,5 +1,6 @@
 #!/usr/bin/perl -w
 use strict;
+use Cwd qw(abs_path);
 use File::Basename;
 use Getopt::Long qw(:config bundling permute pass_through);
 use Term::ANSIColor qw(:constants);
@@ -28,6 +29,11 @@ $Term::ANSIColor::AUTORESET = 1;
 #                                          GLOBAL VARIABLES AND SETTINGS                                             #
 ######################################################################################################################
 
+# Integration tests use an isolated sandbox (test/run-tests.sh), not /etc/cfg-update.conf.
+if (grep { $_ eq '--test' } @ARGV) {
+    exec("bash", dirname(abs_path($0))."/test/run-tests.sh") or die "Can't run test harness: $!\n";
+}
+
 # Setting program variables...
     my $version           = "1.9.1";
     my $progname          = basename($0);
@@ -49,6 +55,8 @@ $Term::ANSIColor::AUTORESET = 1;
     my $settings          = "/etc/cfg-update.conf";
     my $log_file          = "/var/lib/cfg-update/cfg-update.log";
     my $hosts_file        = "/etc/cfg-update.hosts";
+    $settings   = $ENV{CFG_UPDATE_CONF}  if defined $ENV{CFG_UPDATE_CONF}  && $ENV{CFG_UPDATE_CONF}  ne "";
+    $hosts_file = $ENV{CFG_UPDATE_HOSTS} if defined $ENV{CFG_UPDATE_HOSTS} && $ENV{CFG_UPDATE_HOSTS} ne "";
     my $enable_backups    = "yes";
     my $enable_stage1     = "yes";
     my $enable_stage2     = "yes";
@@ -181,7 +189,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $md5sum_after;
     my $show_warning;
     my $threeway_update;
-    my $tool_needs_gui;
+    my $tool_needs_gui    = "no";
     my $tool_supports_2way;
     my $tool_supports_3way;
     my $tool_saves_mergefile_when_aborted;
@@ -435,8 +443,12 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 
 sub test_code{ #RUNMODE# --test
-# Add your test code here and run "cfg-update --test" to execute it...
-    print "Nothing to test...\n";
+    my $runner = dirname(abs_path($0))."/test/run-tests.sh";
+    if (!-e $runner) {
+        print "Test harness not found: $runner\n";
+        exit 1;
+    }
+    exit system("bash", $runner);
 }
 
 sub strip{ #ARGS# ("linefromfile")

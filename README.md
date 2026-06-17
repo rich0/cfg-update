@@ -121,9 +121,11 @@ The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.9.1
 # Validate Perl syntax
 perl -c cfg-update
 
-# Run included test fixtures (on a Gentoo host)
-tar xzf test.tgz -C /tmp
-# See test/prepare_cfg-update_test inside the archive
+# Integration tests (sandbox; Tier A needs no root)
+./test/run-tests.sh
+sudo ./test/run-tests.sh   # Tier B/C auto-update execute tests
+
+# See test/README.md for fixture layout and scenario docs
 ```
 
 ## Reporting issues
