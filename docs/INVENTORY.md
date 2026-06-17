@@ -321,7 +321,7 @@ Legacy archive [`test.tgz`](../test.tgz) (still shipped in the ebuild) contained
 | `stage2-3way-merge-conflict` | MF | 2 → 3 |
 | `stage4-manual-2way` | MF | 4 |
 | `stage4-custom-file` | CF | 4 |
-| `stage5-modified-binary` | MB | 5 (no `._cfg` marker in original archive) |
+| `stage5-modified-binary` | MB | 5 (`._cfg0000_test_modified_binary` added for harness) |
 | `stage5-custom-binary` | CB | 5 |
 | `stage5-file-to-link` | LF | 5 |
 | `stage5-link-to-file` | FL | 5 |
@@ -329,7 +329,7 @@ Legacy archive [`test.tgz`](../test.tgz) (still shipped in the ebuild) contained
 
 Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (ancestors), `checksum.index.entry`, and `scenario.md`. Combined index: `test/fixtures/checksum.index.seed`. Legacy setup script: `test/fixtures/legacy/prepare_cfg-update_test`.
 
-**Next (stage 6):** integration harness + local validation on Gentoo; CI/Renovate deferred.
+**Stage 6b (done):** [`test/run-tests.sh`](../test/run-tests.sh) Tier 0/A (no root), [`test/lint-fixtures.sh`](../test/lint-fixtures.sh); Tier B/C need root until 6c sandbox bypass. CI/Renovate deferred.
 
 ---
 

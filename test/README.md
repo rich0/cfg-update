@@ -10,6 +10,8 @@ The original archive kept every file in a flat `test/` directory. The layout her
 | `backups/etc/test/*` | `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/` |
 | `checksum.index.entry` | Line appended to `{sandbox}/var/lib/cfg-update/checksum.index` |
 
+Deploy with `cp -a scenario/etc/.` (not `etc/*`) so `._cfg*` dotfiles are included.
+
 Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.index.seed) for a full index, or use per-scenario entries when testing in isolation.
 
 ## Scenarios
@@ -22,7 +24,7 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 | [`stage2-3way-merge-conflict`](fixtures/stage2-3way-merge-conflict/) | MF | 3 | Modified file + ancestor; diff3 leaves conflict markers |
 | [`stage4-manual-2way`](fixtures/stage4-manual-2way/) | MF | 4 | Modified file, no ancestor; manual 2-way merge |
 | [`stage4-custom-file`](fixtures/stage4-custom-file/) | CF | 4 | File not in index (user-created); manual handling |
-| [`stage5-modified-binary`](fixtures/stage5-modified-binary/) | MB | 5 | Modified binary (see scenario note — no `._cfg` marker) |
+| [`stage5-modified-binary`](fixtures/stage5-modified-binary/) | MB | 5 | Modified binary + new `._cfg` marker; manual handling |
 | [`stage5-custom-binary`](fixtures/stage5-custom-binary/) | CB | 5 | Custom binary not in index |
 | [`stage5-file-to-link`](fixtures/stage5-file-to-link/) | LF | 5 | Live file → new symlink |
 | [`stage5-link-to-file`](fixtures/stage5-link-to-file/) | FL | 5 | Live symlink → new regular file |
@@ -34,25 +36,37 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 
 ## Running tests
 
-Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` (no writes to `/etc`).
+Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` / `CFG_UPDATE_HOSTS` (no writes to `/etc`).
 
-**Requirements:** Perl (`Term::ANSIColor`, `Term::ReadKey`), `diff3`, `grep`, `find`.
+Fixture lint: [`lint-fixtures.sh`](lint-fixtures.sh) — structure, MD5 vs `checksum.index.entry`, duplicate marker detection. Invoked automatically as Tier 0.
+
+**Requirements:** Perl (`Term::ANSIColor`, `Term::ReadKey`), `diff3`, `grep`, `find`, `md5sum`.
 
 ```bash
-# From repo root — Tier A only (no root)
+# From repo root — Tier 0/A only (no root)
 ./test/run-tests.sh
 
 # Full suite including auto-update execute tests (Tier B/C)
 sudo ./test/run-tests.sh
+
+# CI / Gentoo host: fail if root tiers were skipped
+sudo ./test/run-tests.sh --require-root
 ```
 
-| Tier | Flags | Privilege | Checks |
-|------|-------|-----------|--------|
-| A | `-lv` | user | All fixtures classified to expected stage |
-| B | `-p -au` | root | Stages 1–2 pretend; files unchanged |
-| C | `-au` | root | Stage 1 replace + stage 2 diff3 merge |
+| Tier | What | Privilege | Checks |
+|------|------|-----------|--------|
+| 0 | static + lint | user | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
+| A | `-lv`, `-s` | user | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
+| B | `-p -au` | root | Stages 1–2 pretend; live files unchanged |
+| C | `-au` | root | Stage 1 replace + stage 2 diff3 merge (no conflict markers) |
+
+Without root, Tier B/C are skipped and the harness exits 0. Use `--require-root` when B/C must run (e.g. on a Gentoo CI worker).
 
 The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
+
+### cfg-update freeze (stage 6b)
+
+During harness expansion, `cfg-update` is frozen except for `CFG_UPDATE_CONF` and `CFG_UPDATE_HOSTS` env overrides. Sandbox root bypass for non-root Tier B/C is planned for stage 6c (ebuild `FEATURES=test`).
 
 ### Manual single-scenario check (Gentoo host)
 
