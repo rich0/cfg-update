@@ -183,7 +183,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $md5sum_after;
     my $show_warning;
     my $threeway_update;
-    my $tool_needs_gui;
+    my $tool_needs_gui = "no";
     my $tool_supports_2way;
     my $tool_supports_3way;
     my $tool_saves_mergefile_when_aborted;
@@ -414,7 +414,7 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_check_hosts > 0)          { &root_only; &warn_sshfs_deprecated; &check_hosts; exit;}
     if ($opt_s > 0)                    { &list_dirs; exit;}
     if ($opt_l > 0)                    { &list_updates; exit;}
-    if ($opt_u > 0)                    { &root_only; &update_files; exit; }
+    if ($opt_u > 0)                    { &root_only unless &sandbox_mode; &update_files; exit; }
     if ($opt_b > 0)                    { &list_backups; exit; }
     if ($opt_r > 0)                    { &root_only; &restore_backups($opt_r); exit; }
     if ($opt_disable_portage_hook > 0) { &root_only; &disable_portage_hook; exit; }
@@ -475,6 +475,10 @@ sub md5sum{ #ARGS# ("file")
     if ($opt_d >= 1) { print "$tab"."  md5sum $_[0] $debug | awk '{ print \$1 }' $debug\n"; }
     chomp ($md5sum = `md5sum "$_[0]" $debug | awk '{ print \$1 }' $debug`); # sets global variable $md5sum
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</md5sum>\n"; }
+}
+
+sub sandbox_mode { # true when harness/ebuild tests override config via CFG_UPDATE_CONF
+    return (defined $ENV{CFG_UPDATE_CONF} && $ENV{CFG_UPDATE_CONF} ne "" && $opt_ebuild);
 }
 
 sub root_only{ #ARGS# ("text")
