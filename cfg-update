@@ -4,6 +4,18 @@ use File::Basename;
 use Getopt::Long qw(:config bundling permute pass_through);
 use Term::ANSIColor qw(:constants);
 use Term::ReadKey;
+use constant {
+    STATE_UNKNOWN => '--',
+    STATE_MF      => 'MF',
+    STATE_MB      => 'MB',
+    STATE_UF      => 'UF',
+    STATE_UB      => 'UB',
+    STATE_CF      => 'CF',
+    STATE_CB      => 'CB',
+    STATE_LF      => 'LF',
+    STATE_FL      => 'FL',
+    STATE_LL      => 'LL',
+};
 $Term::ANSIColor::AUTORESET = 1;
 
 #
@@ -154,27 +166,19 @@ $Term::ANSIColor::AUTORESET = 1;
     my $spacer        = "$progname $version"; $spacer =~ s/./ /g;
     my $package       = "";
     my $state         = "";
-    my $state0        = "--";
-    my $state1        = "MF";
-    my $state2        = "MB";
-    my $state3        = "UF";
-    my $state4        = "UB";
-    my $state5        = "CF";
-    my $state6        = "CB";
-    my $state7        = "LF";
-    my $state8        = "FL";
-    my $state9        = "LL";
     my $vstate        = "";
-    my $vstate0       = "No index found   ";
-    my $vstate1       = "Modified File    ";
-    my $vstate2       = "Modified Binary  ";
-    my $vstate3       = "Unmodified File  ";
-    my $vstate4       = "Unmodified Binary";
-    my $vstate5       = "Custom File      ";
-    my $vstate6       = "Custom Binary    ";
-    my $vstate7       = "Link to File     ";
-    my $vstate8       = "File to Link     ";
-    my $vstate9       = "Link to Link     ";
+    my %STATE_DESC    = (
+        '--' => 'No index found   ',
+        'MF' => 'Modified File    ',
+        'MB' => 'Modified Binary  ',
+        'UF' => 'Unmodified File  ',
+        'UB' => 'Unmodified Binary',
+        'CF' => 'Custom File      ',
+        'CB' => 'Custom Binary    ',
+        'LF' => 'Link to File     ',
+        'FL' => 'File to Link     ',
+        'LL' => 'Link to Link     ',
+    );
 ###    my $indexing_complete = "undefined";
     my $md5sum;
     my $md5sum_file;
@@ -450,6 +454,19 @@ $Term::ANSIColor::AUTORESET = 1;
 sub test_code{ #RUNMODE# --test
 # Add your test code here and run "cfg-update --test" to execute it...
     print "Nothing to test...\n";
+}
+
+sub state_is { #ARGS# ($state, @codes)
+    my ($s, @codes) = @_;
+    for my $code (@codes) {
+        return 1 if $s eq $code;
+    }
+    return 0;
+}
+
+sub state_label { #ARGS# ($state)
+    my ($s) = @_;
+    return $STATE_DESC{$s} // 'Unknown state    ';
 }
 
 sub strip{ #ARGS# ("linefromfile")
@@ -1032,22 +1049,23 @@ sub determine_state{ #DEPS# (requires that global variable $file1 contains a fil
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum in the checksum-index  : $md5sum_index\n"; }
         if ($md5sum_index =~ /.+/) {
             if (length($md5sum_file) && $md5sum_index !~ $md5sum_file) {
-                $state = $state1; $vstate = $vstate1;                               #  1 = MF = Modified File     - checksum differs from index
-                if (-B "$file1") { $state = $state2; $vstate = $vstate2; }          #  2 = MB = Modified Binary   - you probably replaced the binary file so replace not allowed
+                $state = STATE_MF;                                                  # Modified File     - checksum differs from index
+                if (-B "$file1") { $state = STATE_MB; }                             # Modified Binary   - replaced binary, auto-replace not allowed
             } else {
-                $state = $state3; $vstate = $vstate3;                               #  3 = UF = Unmodified File   - checksum matches with index
-                if (-B "$file1") { $state = $state4; $vstate = $vstate4; }          #  4 = UB = Unmodified Binary - unmodified binary file so replace always allowed
+                $state = STATE_UF;                                                  # Unmodified File   - checksum matches index
+                if (-B "$file1") { $state = STATE_UB; }                             # Unmodified Binary - auto-replace allowed
             }
         } else {
-            $state = $state5; $vstate = $vstate5;                                   #  5 = CF = Custom File       - custom file not installed with portage so replace not allowed
-            if (-B "$file1") { $state = $state6; $vstate = $vstate6; }              #  6 = CB = Custom Binary     - custom binary file so replace not allowed
+            $state = STATE_CF;                                                      # Custom File       - not installed with Portage
+            if (-B "$file1") { $state = STATE_CB; }                                 # Custom Binary
         }
-        if ((-l $file1) && (!-l $file2)) { $state = $state7; $vstate = $vstate7; }  #  7 = LF = Link to File      - replace not allowed, merge
-        if ((!-l $file1) && (-l $file2)) { $state = $state8; $vstate = $vstate8; }  #  8 = FL = File to Link      - replace not allowed, investigate
-        if ((-l $file1) && (-l $file2)) { $state = $state9; $vstate = $vstate9; }   #  9 = LL = Link to Link      - replace not allowed, investigate
+        if ((-l $file1) && (!-l $file2)) { $state = STATE_LF; }                     # Link to File
+        if ((!-l $file1) && (-l $file2)) { $state = STATE_FL; }                     # File to Link
+        if ((-l $file1) && (-l $file2)) { $state = STATE_LL; }                      # Link to Link
     } else {
-        $state = $state0; $vstate = $vstate0;                                       #  0 = ?? = No index found    -> no index checksum-index found
+        $state = STATE_UNKNOWN;                                                     # No checksum.index on disk
     }
+    $vstate = state_label($state);
     if ($opt_d >= 1) { print "$tab"."  State of the current file : $vstate\n"; }
     if (-e $file4) {
         $ancestor_found = "true";
@@ -1092,31 +1110,31 @@ sub list_updates{ #RUNMODE# -l, --list
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state3$|^$state4$/)) {
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
             $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
             if ($opt_v >= 1) { print "$tab"."Stage[1]  "; }
             print "$tab"."$vstate  $list[$i]\n";
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
                 $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                 if ($opt_v >= 1) { print "$tab"."Stage[2]  "; }
                 print "$tab"."$vstate  $list[$i]\n";
             } else {
-                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true")) {
+                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
                     push(@stage3_queue, $list[$i]);
                     $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                     if ($opt_v >= 1) { print "$tab"."Stage[3]  "; }
                     print "$tab"."$vstate  $list[$i]\n";
                 } else {
-                    if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$|^$state5$/)) {
+                    if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
                         push(@stage4_queue, $list[$i]);
                         $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                         if ($opt_v >= 1) { print "$tab"."Stage[4]  "; }
                         print "$tab"."$vstate  $list[$i]\n";
                     } else {
-                        if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (($state =~ /^$state2$|^$state4$|^$state6$|^$state7$|^$state8$|^$state9$/) || (!-e $file1))) {
+                        if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $file1))) {
                             push(@stage5_queue, $list[$i]);
                             $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                             if ($opt_v >= 1) { print "$tab"."Stage[5]  "; }
@@ -1175,10 +1193,10 @@ sub schedule_automatic_updates{
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state3$|^$state4$/)) {
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
             }
         }
@@ -1191,13 +1209,13 @@ sub schedule_manual_updates{
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$/) && ($ancestor_found =~ "true")) {
+        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
             push(@stage3_queue, $list[$i]);
         } else {
-            if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && ($state =~ /^$state1$|^$state3$|^$state5$/)) {
+            if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
                 push(@stage4_queue, $list[$i]);
             } else {
-                if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (($state =~ /^$state2$|^$state4$|^$state6$|^$state7$|^$state8$|^$state9$/) || (!-e $file1))) {
+                if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $file1))) {
                     push(@stage5_queue, $list[$i]);
                 }
             }
@@ -2103,7 +2121,7 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
             print "$tab"."$percentage% - Skip file $file1\n";
             if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (exists in repository)\n"; }
         } else {
-            if (($state =~ $state3) || ($state =~ $state4)) {
+            if (state_is($state, STATE_UF, STATE_UB)) {
                 $path = dirname($file2);
                 if (!-e "$path") {
                     if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
@@ -2268,46 +2286,46 @@ sub warn_sshfs_deprecated {
 sub show_warning{
     if ($opt_d >= 1) { print "$tab"."<show_warning>\n"; $tab = $tab."    "; }
 # 80 chars            ________________________________________________________________________________
-    if ($state =~ /^$state0$/) {
+    if (state_is($state, STATE_UNKNOWN)) {
         print "$tab"."* YOU SHOULD CHOOSE [y] TO UPDATE MANUALLY! CFG-UPDATE CANNOT\n";
         print "$tab"."* DETERMINE IF IT IS SAFE TO REPLACE THIS FILE WITH THE NEW VERSION.\n";
     }
-    if ($state =~ /^$state1$/) {
+    if (state_is($state, STATE_MF)) {
         print "$tab"."* YOU ARE ABOUT TO UPDATE A MODIFIED FILE WHICH PROBABLY CONTAINS\n";
         print "$tab"."* CUSTOM SETTINGS. YOU ARE FORCED TO UPDATE MANUALLY!\n";
     }
-    if ($state =~ /^$state2$/) {
+    if (state_is($state, STATE_MB)) {
         print "$tab"."* YOU ARE ABOUT TO UPDATE A MODIFIED BINARY. YOU SHOULD ASK YOURSELF\n";
         print "$tab"."* WHO CHANGED IT AND WHY? WHAT DOES IT DO? THIS FILE COULD EVEN BE\n";
         print "$tab"."* REPLACED BY A VIRUS OR ROOTKIT! YOU SHOULD INVESTIGATE THIS...\n";
         print "$tab"."* IGNORE THIS WARNING IF YOU RETRY UPDATING AFTER RESTORING A BACKUP!\n";
     }
-    if ($state =~ /^$state3$/) {
+    if (state_is($state, STATE_UF)) {
         print "$tab"."* YOU CAN SAFELY REPLACE THIS UNMODIFIED FILE WITH THE NEW VERSION.\n";
     }
-    if ($state =~ /^$state4$/) {
+    if (state_is($state, STATE_UB)) {
         print "$tab"."* YOU CAN SAFELY REPLACE THIS UNMODIFIED BINARY WITH THE NEW VERSION.\n";
     }
-    if ($state =~ /^$state5$/) {
+    if (state_is($state, STATE_CF)) {
         print "$tab"."* YOU ARE ABOUT TO UPDATE A CUSTOM FILE. YOU SHOULD ASK YOURSELF\n";
         print "$tab"."* WHERE DOES IT COME FROM AND WHAT HAPPENDS WHEN YOU REPLACE IT?\n";
         print "$tab"."* PORTAGE DID NOT INSTALL THE CURRENT FILE, MOST LIKELY IT HAS BEEN\n";
         print "$tab"."* CREATED AFTER INSTALLATION AND IT MAY CONTAIN CUSTOM SETTINGS.\n";
     }
-    if ($state =~ /^$state6$/) {
+    if (state_is($state, STATE_CB)) {
         print "$tab"."* YOU ARE ABOUT TO UPDATE A CUSTOM BINARY. YOU SHOULD ASK YOURSELF\n";
         print "$tab"."* WHERE DOES IT COME FROM AND WHAT HAPPENDS WHEN YOU REPLACE IT?\n";
         print "$tab"."* PORTAGE DID NOT INSTALL THE CURRENT BINARY.\n";
     }
-    if ($state =~ /^$state7$/) {
+    if (state_is($state, STATE_LF)) {
         print "$tab"."* OPTIONALLY REPLACE A LINK WITH A FILE. YOU BETTER CHECK BOTH THE\n";
         print "$tab"."* LINK AND THE FILE FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
     }
-    if ($state =~ /^$state8$/) {
+    if (state_is($state, STATE_FL)) {
         print "$tab"."* OPTIONALLY REPLACE A FILE WITH A LINK. YOU BETTER CHECK BOTH THE\n";
         print "$tab"."* FILE AND THE LINK FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
     }
-    if ($state =~ /^$state9$/) {
+    if (state_is($state, STATE_LL)) {
         print "$tab"."* OPTIONALLY REPLACE A LINK WITH A LINK. YOU BETTER CHECK BOTH LINKS\n";
         print "$tab"."* FIRST. THIS USUALLY MEANS BASELAYOUT CHANGES.\n";
     }
