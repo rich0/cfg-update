@@ -169,6 +169,14 @@ BACKUP_PATH = $backup
 EOF
 }
 
+install_portageq_mock() {
+    cat >"$SANDBOX/bin/portageq" <<'EOF'
+#!/bin/bash
+echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\" \"${CFG_UPDATE_TEST_SANDBOX}/etc/test2\""
+EOF
+    chmod +x "$SANDBOX/bin/portageq"
+}
+
 setup_sandbox() {
     local mode="${1:-all}"  # all | scenario name
     local stages="${2:-all}"
@@ -176,13 +184,10 @@ setup_sandbox() {
     SANDBOX="$(mktemp -d)"
     export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
 
-    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/var/lib/cfg-update/backups/etc/test" "$SANDBOX/bin"
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test" "$SANDBOX/bin"
 
-    cat >"$SANDBOX/bin/portageq" <<'EOF'
-#!/bin/bash
-echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\""
-EOF
-    chmod +x "$SANDBOX/bin/portageq"
+    install_portageq_mock
 
     deploy_backups() {
         local scenario="$1"
@@ -230,6 +235,35 @@ setup_sandbox_no_index() {
     rm -f "$SANDBOX/var/lib/cfg-update/checksum.index"
     assert_missing "no-index sandbox removed checksum.index" \
         "$SANDBOX/var/lib/cfg-update/checksum.index"
+}
+
+setup_multi_config_protect_sandbox() {
+    local stages="${1:-auto}"
+    SANDBOX="$(mktemp -d)"
+    export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
+
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test2" \
+             "$SANDBOX/bin"
+
+    install_portageq_mock
+
+    cp -a "$FIXTURES/stage1-unmodified-text/etc/." "$SANDBOX/etc/test/"
+    cp -a "$FIXTURES/stage1-unmodified-binary/etc/." "$SANDBOX/etc/test2/"
+    {
+        echo "Portage:0"
+        sed "s|/etc/test|${SANDBOX}/etc/test|g" \
+            "$FIXTURES/stage1-unmodified-text/checksum.index.entry"
+        sed "s|/etc/test|${SANDBOX}/etc/test2|g" \
+            "$FIXTURES/stage1-unmodified-binary/checksum.index.entry"
+    } >"$SANDBOX/var/lib/cfg-update/checksum.index"
+
+    write_test_config \
+        "$SANDBOX/etc/cfg-update.conf" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" \
+        "$SANDBOX/var/lib/cfg-update/backups" \
+        "$stages"
 }
 
 run_cfg_update() {
@@ -370,17 +404,13 @@ setup_index_sandbox() {
     SANDBOX="$(mktemp -d)"
     export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
 
-    mkdir -p "$SANDBOX/etc/test" \
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
              "$SANDBOX/var/lib/cfg-update/backups" \
              "$SANDBOX/var/log" \
              "$SANDBOX/var/db/pkg/app-test/test-pkg-1.0" \
              "$SANDBOX/bin"
 
-    cat >"$SANDBOX/bin/portageq" <<'EOF'
-#!/bin/bash
-echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\""
-EOF
-    chmod +x "$SANDBOX/bin/portageq"
+    install_portageq_mock
 
     cp -a "$INDEX_FIXTURE/etc/test_unmodified_file" "$SANDBOX/etc/test/"
     if [[ "$with_marker" == yes ]]; then
@@ -592,6 +622,37 @@ tier_a_protected_dirs() {
     output="$(run_cfg_update -s 2>&1)" || true
     assert_output_matches "protected dirs lists sandbox etc/test" \
         "${SANDBOX}/etc/test" "$output"
+    assert_output_matches "protected dirs lists sandbox etc/test2" \
+        "${SANDBOX}/etc/test2" "$output"
+}
+
+tier_a_multi_config_protect() {
+    echo "=== Tier A: multi CONFIG_PROTECT dirs ==="
+    local output
+
+    setup_multi_config_protect_sandbox auto
+    output="$(run_cfg_update -s 2>&1)" || true
+    assert_output_matches "multi-dir: protected lists etc/test" \
+        "${SANDBOX}/etc/test" "$output"
+    assert_output_matches "multi-dir: protected lists etc/test2" \
+        "${SANDBOX}/etc/test2" "$output"
+
+    output="$(run_cfg_update -lv 2>&1)" || true
+    assert_output_matches "multi-dir: classifies marker in etc/test" \
+        'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*etc/test/._cfg0000_test_unmodified_file' "$output"
+    assert_output_matches "multi-dir: classifies marker in etc/test2" \
+        'Stage\[1\][[:space:]]+Unmodified Binary[[:space:]].*etc/test2/._cfg0000_test_unmodified_binary' "$output"
+
+    run_cfg_update -au >/dev/null
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "multi-dir: backup list includes etc/test file" \
+        'etc/test/test_unmodified_file' "$output"
+    assert_output_matches "multi-dir: backup list includes etc/test2 file" \
+        'etc/test2/test_unmodified_binary' "$output"
+    assert_output_matches "multi-dir: backup list has two numbered entries" \
+        '^[[:space:]]*1[[:space:]]' "$output"
+    assert_output_matches "multi-dir: backup list second entry" \
+        '^[[:space:]]*2[[:space:]]' "$output"
 }
 
 tier_a_ancestor_backups() {
@@ -919,6 +980,7 @@ main() {
     tier_a_per_scenario
     tier_a_no_index
     tier_a_protected_dirs
+    tier_a_multi_config_protect
     tier_a_ancestor_backups
     tier_b_pretend_auto
     tier_c_execute_auto

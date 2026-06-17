@@ -57,7 +57,7 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | Tier | What | Checks |
 |------|------|--------|
 | 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
-| A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), missing-index case, protected dirs, ancestor backups on disk |
+| A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), missing-index case, protected dirs, multi `CONFIG_PROTECT` dirs, ancestor backups on disk |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
@@ -70,7 +70,7 @@ Tier B/C/D/E/F pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, an
 
 Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses a mock `kdiff3` to verify 3-way merge invocation. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
 
-The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
+The harness prepends a mock `portageq` to `PATH` that returns two sandbox directories as `CONFIG_PROTECT`: `etc/test` and `etc/test2` (the latter may be empty in most scenarios). Tier A `multi CONFIG_PROTECT` deploys stage-1 fixtures into both dirs and asserts `-s`, `-lv`, and `-b` see files from each protected path. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 
 ### Sandbox mode (stage 6c)
 
