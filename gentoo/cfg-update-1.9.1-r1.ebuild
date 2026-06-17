@@ -57,14 +57,6 @@ src_install() {
 }
 
 pkg_postinst() {
-	if [[ ! -e "${ROOT}"/var/lib/cfg-update/checksum.index \
-		&& -e "${ROOT}"/usr/lib/cfg-update/checksum.index ]]
-	then
-		ebegin "Moving checksum.index from /usr/lib/cfg-update to /var/lib/cfg-update"
-		mv "${ROOT}"/usr/lib/cfg-update/checksum.index \
-			"${ROOT}"/var/lib/cfg-update/checksum.index
-		eend $?
-	fi
 
 	if [[ -z ${ROOT} ]]
 	then
