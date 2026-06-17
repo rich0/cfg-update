@@ -1,6 +1,5 @@
 #!/usr/bin/perl -w
 use strict;
-use Cwd qw(abs_path);
 use File::Basename;
 use Getopt::Long qw(:config bundling permute pass_through);
 use Term::ANSIColor qw(:constants);
@@ -28,11 +27,6 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 #                                          GLOBAL VARIABLES AND SETTINGS                                             #
 ######################################################################################################################
-
-# Integration tests use an isolated sandbox (test/run-tests.sh), not /etc/cfg-update.conf.
-if (grep { $_ eq '--test' } @ARGV) {
-    exec("bash", dirname(abs_path($0))."/test/run-tests.sh") or die "Can't run test harness: $!\n";
-}
 
 # Setting program variables...
     my $version           = "1.9.1";
@@ -189,7 +183,7 @@ if (grep { $_ eq '--test' } @ARGV) {
     my $md5sum_after;
     my $show_warning;
     my $threeway_update;
-    my $tool_needs_gui    = "no";
+    my $tool_needs_gui;
     my $tool_supports_2way;
     my $tool_supports_3way;
     my $tool_saves_mergefile_when_aborted;
@@ -443,12 +437,8 @@ if (grep { $_ eq '--test' } @ARGV) {
 ######################################################################################################################
 
 sub test_code{ #RUNMODE# --test
-    my $runner = dirname(abs_path($0))."/test/run-tests.sh";
-    if (!-e $runner) {
-        print "Test harness not found: $runner\n";
-        exit 1;
-    }
-    exit system("bash", $runner);
+# Add your test code here and run "cfg-update --test" to execute it...
+    print "Nothing to test...\n";
 }
 
 sub strip{ #ARGS# ("linefromfile")

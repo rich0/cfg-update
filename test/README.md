@@ -44,9 +44,6 @@ Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `
 
 # Full suite including auto-update execute tests (Tier B/C)
 sudo ./test/run-tests.sh
-
-# Or via cfg-update --test (same harness)
-./cfg-update --test
 ```
 
 | Tier | Flags | Privilege | Checks |
