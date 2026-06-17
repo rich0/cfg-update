@@ -475,8 +475,14 @@ sub strip_comment{ #ARGS# ("linefromfile")
 sub readkey{
     if ($opt_d >= 1) { print "\n$tab"."<readkey>\n"; $tab = $tab."    "; print "$tab"; }
     if (&sandbox_mode && !-t STDIN) {
-        chomp($key = <STDIN>);
-        print "$tab"."$key\n";
+        my $line = <STDIN>;
+        if (!defined $line) {
+            $key = "s";
+            print "$tab"."s\n";
+        } else {
+            chomp($key = $line);
+            print "$tab"."$key\n";
+        }
     } else {
         ReadMode 4; # Turn off controls keys
         $key = ReadKey 0;
@@ -1443,7 +1449,15 @@ sub update_stage4{ #ARGS# ("pretend|execute")
         print BOLD BLUE "$tab"."<< Stage4 >> ".@stage4_queue." files in queue for manual 2-way merging, skipping...\n\n";
     } else {
         print BOLD BLUE "$tab"."<< Stage4 >> ".@stage4_queue." files in queue for manual 2-way merging, starting...\n\n";
-        if ($merge_tool_name =~ /^diff3$/) { print "$tab"."* diff3 cannot be used for this stage, changing to sdiff\n\n"; $merge_tool = "/usr/bin/sdiff"; }
+        if ($merge_tool_name =~ /^diff3$/) {
+            print "$tab"."* diff3 cannot be used for this stage, changing to sdiff\n\n";
+            if (&sandbox_mode && $ENV{CFG_UPDATE_TEST_SANDBOX} && -x "$ENV{CFG_UPDATE_TEST_SANDBOX}/bin/sdiff") {
+                $merge_tool = "$ENV{CFG_UPDATE_TEST_SANDBOX}/bin/sdiff";
+            } else {
+                $merge_tool = "/usr/bin/sdiff";
+            }
+            $merge_tool_name = basename($merge_tool);
+        }
         $threeway_update = "no";
         for (my $i = 0; $i < @stage4_queue; ++$i) {
             &prepare_filenames_for_updating($stage4_queue[$i]);

@@ -277,12 +277,20 @@ assert_stage_output() {
                 'manual 3-way merging, starting' "$output"
             assert_output_not_matches "$desc: not 2-way mode" \
                 'manual 2-way merging, starting' "$output"
+            assert_output_not_matches "$desc: no stage4 diff3 switch" \
+                'diff3 cannot be used for this stage' "$output"
+            assert_output_not_matches "$desc: offers merge tool" \
+                'This update cannot be done with the diff/merge tool' "$output"
             ;;
         4)
             assert_output_matches "$desc: 2-way merge mode" \
                 'manual 2-way merging, starting' "$output"
             assert_output_not_matches "$desc: not 3-way mode" \
                 'manual 3-way merging, starting' "$output"
+            assert_output_matches "$desc: stage4 diff3-to-sdiff switch" \
+                'diff3 cannot be used for this stage, changing to sdiff' "$output"
+            assert_output_not_matches "$desc: no stage5 non-merge path" \
+                'This update cannot be done with the diff/merge tool' "$output"
             ;;
         5)
             assert_output_matches "$desc: manual update mode" \
@@ -291,8 +299,37 @@ assert_stage_output() {
                 'manual 3-way merging, starting' "$output"
             assert_output_not_matches "$desc: not 2-way mode" \
                 'manual 2-way merging, starting' "$output"
+            assert_output_not_matches "$desc: no stage4 diff3 switch" \
+                'diff3 cannot be used for this stage' "$output"
+            assert_output_not_matches "$desc: no merge-tool offer" \
+                'Merge manually with file' "$output"
             ;;
     esac
+}
+
+install_mock_sdiff() {
+    local golden_merge="${1:-}"
+    cat >"$SANDBOX/bin/sdiff" <<'EOF'
+#!/bin/bash
+log="${CFG_UPDATE_TEST_SANDBOX}/mock-sdiff.log"
+echo "$*" >>"$log"
+outfile=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) outfile="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+echo "TWO_WAY=yes" >>"$log"
+if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
+    cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
+fi
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/sdiff"
+    if [[ -n "$golden_merge" ]]; then
+        cp "$golden_merge" "$SANDBOX/golden.merge"
+    fi
 }
 
 remap_sandbox_paths() {
@@ -639,6 +676,21 @@ tier_d_execute_manual() {
     assert_file_equals "stage3 mock merge matches golden" \
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+
+    # Stage 4: mock sdiff must run 2-way merge (no -b ancestor)
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_sdiff "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    output="$(run_cfg_update_stdin $'y\n1\ny\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage4 manual mock merge" 4 "$output"
+    assert_output_matches "stage4 switches diff3 to sdiff" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_contains "stage4 mock sdiff used 2-way merge" \
+        "$SANDBOX/mock-sdiff.log" "TWO_WAY=yes"
+    assert_file_equals "stage4 mock merge matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 mock merge removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
 
     # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)
     setup_sandbox stage4-manual-2way stage4_only
