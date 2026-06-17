@@ -1,0 +1,4 @@
+#version 1.1
+#this time, Portage did install this configfile when installing program X...
+
+SETTING = new-default # contains a default value chosen by the developer
