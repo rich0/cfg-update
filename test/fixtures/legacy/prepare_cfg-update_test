@@ -1,0 +1,21 @@
+#!/bin/bash
+
+#cfg-update --force --index
+
+echo "/etc/test/test_unmodified_file e2dda9550032d229538e6ae35652ca6d" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_auto_3way_success 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_auto_3way_conflict 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_manual_2way 0" >> /var/lib/cfg-update/checksum.index
+#echo "/etc/test/test_custom_file 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_unmodified_binary 6964280fbdcfa71b9bb39c07ef72f506" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_modified_binary 0" >> /var/lib/cfg-update/checksum.index
+#echo "/etc/test/test_custom_binary 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_file_2_link 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_link_2_file 0" >> /var/lib/cfg-update/checksum.index
+echo "/etc/test/test_link_2_link 0" >> /var/lib/cfg-update/checksum.index
+
+rm -rf /var/lib/cfg-update/backups/etc/test/.* 2>/dev/null
+mv /etc/test/._new-cfg_test_auto_3way_conflict /var/lib/cfg-update/backups/etc/test/._new-cfg_test_auto_3way_conflict
+mv /etc/test/._new-cfg_test_auto_3way_success /var/lib/cfg-update/backups/etc/test/._new-cfg_test_auto_3way_success
+
+cfg-update --list

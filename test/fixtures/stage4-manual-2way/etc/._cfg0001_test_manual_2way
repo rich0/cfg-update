@@ -1,0 +1,5 @@
+#version 1.2
+
+SETTING = default # contains a default value chosen by the developer
+
+ADDED = deafult # contains a default value chosen by the developer

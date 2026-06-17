@@ -309,21 +309,27 @@ These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-
 
 ---
 
-## test.tgz fixtures
+## Test fixtures
 
-Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
+Legacy archive [`test.tgz`](../test.tgz) (still shipped in the ebuild) contained a flat `test/` directory. Stage 6 extracts scenarios into [`test/fixtures/`](../test/fixtures/) — one subdirectory per case. See [`test/README.md`](../test/README.md).
 
-| Fixture | Exercises |
-|---------|-----------|
-| `test_unmodified_file` | Stage 1 |
-| `test_auto_3way_success` / `test_auto_3way_conflict` | Stage 2 |
-| `test_manual_2way` | Stage 4 |
-| `test_custom_file` | Stage 4/5 (CF state) |
-| `test_modified_binary`, `test_unmodified_binary` | Stage 5 |
-| `test_file_2_link`, `test_link_2_file`, `test_link_2_link` | Stage 5 link handling |
-| `prepare_cfg-update_test` | Seeds checksum index + backups; runs `cfg-update --list` |
+| Scenario directory | State | Stage |
+|--------------------|-------|-------|
+| `stage1-unmodified-text` | UF | 1 |
+| `stage1-unmodified-binary` | UB | 1 |
+| `stage2-3way-merge-success` | MF | 2 |
+| `stage2-3way-merge-conflict` | MF | 2 → 3 |
+| `stage4-manual-2way` | MF | 4 |
+| `stage4-custom-file` | CF | 4 |
+| `stage5-modified-binary` | MB | 5 (no `._cfg` marker in original archive) |
+| `stage5-custom-binary` | CB | 5 |
+| `stage5-file-to-link` | LF | 5 |
+| `stage5-link-to-file` | FL | 5 |
+| `stage5-link-to-link` | LL | 5 |
 
-**Recommendation:** Extract to `test/` in repo (not just `.tgz`) in stage 6 for CI smoke tests.
+Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (ancestors), `checksum.index.entry`, and `scenario.md`. Combined index: `test/fixtures/checksum.index.seed`. Legacy setup script: `test/fixtures/legacy/prepare_cfg-update_test`.
+
+**Next (stage 6):** integration harness + local validation on Gentoo; CI/Renovate deferred.
 
 ---
 
@@ -354,7 +360,7 @@ Archive contains synthetic `._cfg0000_*` scenarios under `test/`:
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
 | 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
-| 6 | `refactor/stage-6-ci-renovate` | `perl -c`, shellcheck, extract test fixtures, `renovate.json` |
+| 6 | `refactor/stage-6-tests` | ~~Extract fixtures to scenario subdirs~~ **In progress**; harness, `CFG_UPDATE_CONF`; CI/Renovate deferred |
 
 ---
 
