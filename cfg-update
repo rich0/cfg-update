@@ -36,6 +36,7 @@ $Term::ANSIColor::AUTORESET = 1;
 # Set default settings...
     my $pkg_manager       = "Portage";
     my $install_log       = "/var/log/emerge.log";
+    my $install_log_configured = 0;
     my $find_string       = "::: completed emerge";
     my $pkg_db            = "/var/db/pkg";
     my $portage_hook      = "/etc/portage/bashrc";
@@ -86,6 +87,7 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*INDEXFILE\s*=\s*/i)         { $index_file        = &strip($'); }
         if ($line =~ /^\s*INDEX_FILE\s*=\s*/i)        { $index_file        = &strip($'); }
         if ($line =~ /^\s*PKG_DB\s*=\s*/i)            { $pkg_db            = &strip($'); }
+        if ($line =~ /^\s*INSTALL_LOG\s*=\s*/i)       { $install_log = &strip($'); $install_log_configured = 1; }
         if ($line =~ /^\s*PORTAGE_HOOK\s*=\s*/i)      { $portage_hook      = &strip($'); }
         if ($line =~ /^\s*PALUDIS_HOOK\s*=\s*/i)      { $paludis_hook      = &strip($'); }
         if ($line =~ /^\s*LOGFILE\s*=\s*/i)           { $log_file          = &strip($'); }
@@ -370,13 +372,13 @@ $Term::ANSIColor::AUTORESET = 1;
 # If --paludis is used then set the package manager to Paludis...
     if ($opt_paludis > 0) {
         $pkg_manager = "Paludis";
-        $install_log = "/var/log/paludis.log";
+        if (!$install_log_configured) { $install_log = "/var/log/paludis.log"; }
         $find_string = "finished install of package";
     }
 # Else set the package manager to Portage...
     else {
         $pkg_manager = "Portage";
-        $install_log = "/var/log/emerge.log";
+        if (!$install_log_configured) { $install_log = "/var/log/emerge.log"; }
         $find_string = "::: completed emerge";
     }
 # If debug mode is detected show most important variables...
@@ -396,7 +398,7 @@ $Term::ANSIColor::AUTORESET = 1;
     }
 # If --index is used then check/build index...
     if ($opt_i > 0) {
-        &root_only;
+        &root_only unless &sandbox_mode;
         &check_index;
         exit;
     }

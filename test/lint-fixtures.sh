@@ -99,6 +99,37 @@ lint_execute_scenarios_have_expected() {
     done
 }
 
+lint_index_portage_fixture() {
+    local fixture="$FIXTURES/index-portage"
+    local name="index-portage"
+    [[ -d "$fixture/etc" ]] || { fail "$name: missing etc/"; return; }
+    [[ -f "$fixture/etc/test_unmodified_file" ]] || { fail "$name: missing live file"; return; }
+    [[ -f "$fixture/var/db/pkg/app-test/test-pkg-1.0/CONTENTS.template" ]] || {
+        fail "$name: missing CONTENTS.template"; return
+    }
+    local live_hash contents_hash golden_hash
+    live_hash="$(md5sum "$fixture/etc/test_unmodified_file" | awk '{print $1}')"
+    contents_hash="$(awk '{print $3}' "$fixture/var/db/pkg/app-test/test-pkg-1.0/CONTENTS.template")"
+    golden_hash="$(awk 'NR==2 {print $2}' "$fixture/checksum.index.current")"
+    if [[ "$live_hash" == "$contents_hash" ]]; then
+        pass "$name: CONTENTS MD5 matches live file"
+    else
+        fail "$name: CONTENTS MD5 mismatch (template $contents_hash, live $live_hash)"
+    fi
+    if [[ "$live_hash" == "$golden_hash" ]]; then
+        pass "$name: golden index MD5 matches live file"
+    else
+        fail "$name: golden index MD5 mismatch (golden $golden_hash, live $live_hash)"
+    fi
+    for f in emerge.log.current emerge.log.stale checksum.index.current checksum.index.stale; do
+        if [[ -f "$fixture/$f" ]]; then
+            pass "$name: has $f"
+        else
+            fail "$name: missing $f"
+        fi
+    done
+}
+
 lint_duplicate_markers() {
     local combined
     combined="$(mktemp)"
@@ -123,6 +154,7 @@ main() {
         lint_expected_files "$scenario"
     done
     lint_execute_scenarios_have_expected
+    lint_index_portage_fixture
     lint_duplicate_markers
     echo ""
     echo "Results: $PASS passed, $FAIL failed"

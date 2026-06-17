@@ -6,6 +6,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIXTURES="$REPO_ROOT/test/fixtures"
+INDEX_FIXTURE="$FIXTURES/index-portage"
 CFG_UPDATE="$REPO_ROOT/cfg-update"
 HOSTS_FILE="$REPO_ROOT/test/cfg-update.hosts"
 LINT_FIXTURES="$REPO_ROOT/test/lint-fixtures.sh"
@@ -229,6 +230,86 @@ run_cfg_update_stdin() {
     shift
     local extra_args=("$@")
     printf '%b' "$keys" | run_cfg_update "${extra_args[@]}"
+}
+
+remap_sandbox_paths() {
+    sed "s|@SANDBOX@|$SANDBOX|g" "$1"
+}
+
+write_index_test_config() {
+    local conf="$1" index="$2" backup="$3" pkg_db="$4" install_log="$5"
+    cat >"$conf" <<EOF
+MERGE_TOOL = /usr/bin/diff3
+ENABLE_BACKUPS = yes
+ENABLE_STAGE1 = yes
+ENABLE_STAGE2 = yes
+ENABLE_STAGE3 = yes
+ENABLE_STAGE4 = yes
+ENABLE_STAGE5 = yes
+INDEX_FILE = $index
+BACKUP_PATH = $backup
+PKG_DB = $pkg_db
+INSTALL_LOG = $install_log
+EOF
+}
+
+setup_index_sandbox() {
+    local index_variant="$1"
+    local emerge_variant="$2"
+    local with_marker="${3:-no}"
+
+    SANDBOX="$(mktemp -d)"
+    export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
+
+    mkdir -p "$SANDBOX/etc/test" \
+             "$SANDBOX/var/lib/cfg-update/backups" \
+             "$SANDBOX/var/log" \
+             "$SANDBOX/var/db/pkg/app-test/test-pkg-1.0" \
+             "$SANDBOX/bin"
+
+    cat >"$SANDBOX/bin/portageq" <<'EOF'
+#!/bin/bash
+echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\""
+EOF
+    chmod +x "$SANDBOX/bin/portageq"
+
+    cp -a "$INDEX_FIXTURE/etc/test_unmodified_file" "$SANDBOX/etc/test/"
+    if [[ "$with_marker" == yes ]]; then
+        cp -a "$FIXTURES/stage1-unmodified-text/etc/._cfg0000_test_unmodified_file" \
+            "$SANDBOX/etc/test/"
+    fi
+
+    remap_sandbox_paths "$INDEX_FIXTURE/var/db/pkg/app-test/test-pkg-1.0/CONTENTS.template" \
+        >"$SANDBOX/var/db/pkg/app-test/test-pkg-1.0/CONTENTS"
+    cp "$INDEX_FIXTURE/emerge.log.$emerge_variant" "$SANDBOX/var/log/emerge.log"
+    remap_sandbox_paths "$INDEX_FIXTURE/checksum.index.$index_variant" \
+        >"$SANDBOX/var/lib/cfg-update/checksum.index"
+
+    write_index_test_config \
+        "$SANDBOX/etc/cfg-update.conf" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" \
+        "$SANDBOX/var/lib/cfg-update/backups" \
+        "$SANDBOX/var/db/pkg" \
+        "$SANDBOX/var/log/emerge.log"
+}
+
+index_golden_path() {
+    remap_sandbox_paths "$INDEX_FIXTURE/checksum.index.current"
+}
+
+assert_index_header() {
+    local desc="$1" file="$2" expected_ts="$3"
+    local header
+    header="$(head -1 "$file")"
+    if [[ "$header" == "Portage:$expected_ts" ]]; then
+        pass "$desc"
+    else
+        fail "$desc (expected Portage:$expected_ts, got: $header)"
+    fi
+}
+
+run_cfg_update_index() {
+    run_cfg_update -i "$@"
 }
 
 tier0_static() {
@@ -548,6 +629,57 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/._cfg0000_test_link_2_link"
 }
 
+tier_e_index_portage() {
+    echo "=== Tier E: Portage --index (-i) ==="
+    local output golden index_before
+
+    setup_index_sandbox current current
+    index_before="$(mktemp)"
+    cp "$SANDBOX/var/lib/cfg-update/checksum.index" "$index_before"
+    output="$(run_cfg_update_index 2>&1)" || true
+    assert_output_matches "index up-to-date skips rebuild" \
+        'Checksum index is up-to-date' "$output"
+    assert_file_equals "index up-to-date left file unchanged" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" "$index_before"
+    rm -f "$index_before"
+
+    setup_index_sandbox stale current
+    golden="$(mktemp)"
+    index_golden_path >"$golden"
+    run_cfg_update_index >/dev/null
+    assert_index_header "index stale rebuild updated header" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" "1690000000"
+    assert_file_equals "index stale rebuild matches golden" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" "$golden"
+    rm -f "$golden"
+
+    setup_index_sandbox stale current yes
+    index_before="$(mktemp)"
+    cp "$SANDBOX/var/lib/cfg-update/checksum.index" "$index_before"
+    output="$(run_cfg_update_index 2>&1)" || true
+    assert_output_matches "index marker present skips rebuild" \
+        'Skipping checksum index updating' "$output"
+    assert_file_equals "index marker present left file unchanged" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" "$index_before"
+    rm -f "$index_before"
+
+    setup_index_sandbox stale current yes
+    run_cfg_update_index -f >/dev/null
+    assert_index_header "index force rebuild uses zero timestamp" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" "0000000000"
+    assert_file_contains "index force rebuild has indexed path" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" \
+        "$SANDBOX/etc/test/test_unmodified_file e2dda9550032d229538e6ae35652ca6d"
+
+    setup_index_sandbox stale current
+    run_cfg_update_index >/dev/null
+    cp -a "$FIXTURES/stage1-unmodified-text/etc/._cfg0000_test_unmodified_file" \
+        "$SANDBOX/etc/test/"
+    output="$(run_cfg_update -lv 2>&1)" || true
+    assert_output_matches "index rebuild enables stage1 classify" \
+        'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*_cfg0000_test_unmodified_file' "$output"
+}
+
 main() {
     parse_args "$@"
 
@@ -571,6 +703,7 @@ main() {
     tier_b_pretend_auto
     tier_c_execute_auto
     tier_d_execute_manual
+    tier_e_index_portage
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
