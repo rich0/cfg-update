@@ -801,6 +801,53 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/._cfg0000_test_link_2_link"
 }
 
+tier_f_backups_maintenance() {
+    echo "=== Tier F: backups and maintenance (-b, -r, --optimize-backups) ==="
+    local output backup_root
+
+    setup_sandbox stage2-3way-merge-success auto
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "backup list empty before update" \
+        'No \(._old-cfg_\*\) files found' "$output"
+
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "stage2 update created old backup" \
+        "$backup_root/._old-cfg_test_auto_3way_success"
+    assert_file_exists "stage2 update created new backup" \
+        "$backup_root/._new-cfg_test_auto_3way_success"
+
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "backup list shows restored target path" \
+        'test_auto_3way_success' "$output"
+    assert_output_matches "backup list shows numbered entry" \
+        '^[[:space:]]*1[[:space:]]' "$output"
+
+    output="$(run_cfg_update_stdin $'y\n' -r 1 2>&1)" || true
+    assert_output_matches "restore completes" \
+        'Restore complete' "$output"
+    assert_file_equals "restore rewrote live config from backup" \
+        "$SANDBOX/etc/test/test_auto_3way_success" \
+        "$FIXTURES/stage2-3way-merge-success/etc/test_auto_3way_success"
+    assert_file_equals "restore rewrote cfg marker from backup" \
+        "$SANDBOX/etc/test/._cfg0000_test_auto_3way_success" \
+        "$FIXTURES/stage2-3way-merge-success/etc/._cfg0000_test_auto_3way_success"
+    assert_missing "restore removed old backup file" \
+        "$backup_root/._old-cfg_test_auto_3way_success"
+    assert_missing "restore removed new backup file" \
+        "$backup_root/._new-cfg_test_auto_3way_success"
+
+    setup_sandbox stage1-unmodified-text auto
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    output="$(run_cfg_update --optimize-backups 2>&1)" || true
+    assert_output_matches "optimize-backups creates ancestor for unmodified file" \
+        'Make file.*_new-cfg_test_unmodified_file' "$output"
+    assert_file_exists "optimize-backups wrote new-cfg backup" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_file_contains "optimize-backups backup matches live file" \
+        "$backup_root/._new-cfg_test_unmodified_file" "#version 1.0"
+}
+
 tier_e_index_portage() {
     echo "=== Tier E: Portage --index (-i) ==="
     local output golden index_before
@@ -877,6 +924,7 @@ main() {
     tier_c_execute_auto
     tier_d_execute_manual
     tier_e_index_portage
+    tier_f_backups_maintenance
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"

@@ -431,11 +431,11 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_l > 0)                    { &list_updates; exit;}
     if ($opt_u > 0)                    { &root_only unless &sandbox_mode; &update_files; exit; }
     if ($opt_b > 0)                    { &list_backups; exit; }
-    if ($opt_r > 0)                    { &root_only; &restore_backups($opt_r); exit; }
+    if ($opt_r > 0)                    { &root_only unless &sandbox_mode; &restore_backups($opt_r); exit; }
     if ($opt_disable_portage_hook > 0) { &root_only; &disable_portage_hook; exit; }
     if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
-    if ($opt_move_backups > 0)         { &root_only; &move_backups; exit; }
-    if ($opt_optimize_backups > 0)     { &root_only; &optimize_backups; exit; }
+    if ($opt_move_backups > 0)         { &root_only unless &sandbox_mode; &move_backups; exit; }
+    if ($opt_optimize_backups > 0)     { &root_only unless &sandbox_mode; &optimize_backups; exit; }
     if ($opt_unmount_hosts > 0)        { &root_only; &warn_sshfs_deprecated; &unmount_hosts; exit;}
 # If none of the above options are used, check for undocumented usage modes (2-way and 3-way diff mode)
     if ((@ARGV == 2) && (-f $ARGV[0]) && (-f $ARGV[1]))                  { &root_only; &diff_two_files; exit;   } # Simply parsing two files to diff/merge tool

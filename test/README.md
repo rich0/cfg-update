@@ -62,8 +62,9 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
 | E | `-i` / `-i -f` | Portage `--index`: up-to-date skip, stale rebuild from mock CONTENTS, marker-blocked skip, force rebuild |
+| F | `-b`, `-r`, `--optimize-backups` | Backup list/restore after stage-2 update; optimize-backups creates `._new-cfg_*` for unmodified files |
 
-Tier B/C/D/E pass `--testsandbox` with `--ebuild` so `-u` and `--index` skip the root check inside the temp sandbox.
+Tier B/C/D/E/F pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, and `--optimize-backups` skip the root check inside the temp sandbox.
 
 ### Golden `expected/` files
 
@@ -73,7 +74,7 @@ The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/t
 
 ### Sandbox mode (stage 6c)
 
-When `--testsandbox` and `--ebuild` are passed, `cfg-update -u` and `cfg-update --index` skip the root check so the harness and ebuild `src_test()` can run Tier B/C/D/E as an unprivileged user. Tier E uses mock `PKG_DB`, `INSTALL_LOG`, and `portageq` under [`fixtures/index-portage/`](fixtures/index-portage/). In the same mode, `readkey` reads from STDIN when piped (enabling Tier D). `CFG_UPDATE_CONF` only selects the config file path; production `-u`/`--index` still require root.
+When `--testsandbox` and `--ebuild` are passed, `cfg-update -u`, `cfg-update --index`, `cfg-update -r`, and `cfg-update --optimize-backups` skip the root check so the harness and ebuild `src_test()` can run Tier B/C/D/E/F as an unprivileged user. Tier E uses mock `PKG_DB`, `INSTALL_LOG`, and `portageq` under [`fixtures/index-portage/`](fixtures/index-portage/). In the same mode, `readkey` reads from STDIN when piped (enabling Tier D and Tier F restore). `CFG_UPDATE_CONF` only selects the config file path; production `-u`/`--index`/`-r`/`--optimize-backups` still require root.
 
 ### Manual single-scenario check (Gentoo host)
 
