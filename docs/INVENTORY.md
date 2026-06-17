@@ -329,7 +329,7 @@ Legacy archive [`test.tgz`](../test.tgz) (still shipped in the ebuild) contained
 
 Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (ancestors), `checksum.index.entry`, and `scenario.md`. Combined index: `test/fixtures/checksum.index.seed`. Legacy setup script: `test/fixtures/legacy/prepare_cfg-update_test`.
 
-**Stage 6b (done):** [`test/run-tests.sh`](../test/run-tests.sh) Tier 0/A, [`test/lint-fixtures.sh`](../test/lint-fixtures.sh). **Stage 6c:** sandbox `root_only` bypass for `-u` with `CFG_UPDATE_CONF` + `--ebuild`; ebuild `src_test()` via `FEATURES=test`. CI/Renovate deferred.
+**Stage 6b (done):** [`test/run-tests.sh`](../test/run-tests.sh) Tier 0/A, [`test/lint-fixtures.sh`](../test/lint-fixtures.sh). **Stage 6c:** sandbox `root_only` bypass for `-u` with `--testsandbox` + `--ebuild`; ebuild `src_test()` via `FEATURES=test`. CI/Renovate deferred.
 
 ---
 

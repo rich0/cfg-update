@@ -1,6 +1,6 @@
 #!/bin/bash
 # Integration test harness for cfg-update fixtures.
-# All tiers run without root when CFG_UPDATE_CONF sandbox is active (stage 6c).
+# All tiers run without root when cfg-update is invoked with --testsandbox (stage 6c).
 
 set -euo pipefail
 
@@ -175,7 +175,7 @@ run_cfg_update() {
     CFG_UPDATE_CONF="$SANDBOX/etc/cfg-update.conf" \
     CFG_UPDATE_HOSTS="$HOSTS_FILE" \
     PATH="$SANDBOX/bin:$PATH" \
-    perl "$CFG_UPDATE" --ebuild "${extra_args[@]}"
+    perl "$CFG_UPDATE" --ebuild --testsandbox "${extra_args[@]}"
 }
 
 tier0_static() {

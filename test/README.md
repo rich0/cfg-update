@@ -60,13 +60,13 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stage 1 replace + stage 2 diff3 merge (no conflict markers) |
 
-Tier B/C use `CFG_UPDATE_CONF` sandbox mode (`cfg-update --ebuild` skips the root check for `-u`).
+Tier B/C pass `--testsandbox` with `--ebuild` so `-u` skips the root check inside the temp sandbox.
 
 The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 
 ### Sandbox mode (stage 6c)
 
-When `CFG_UPDATE_CONF` is set and `--ebuild` is passed, `cfg-update -u` skips the root check so the harness and ebuild `src_test()` can run Tier B/C as an unprivileged user. Production use without those guards still requires root.
+When `--testsandbox` and `--ebuild` are passed, `cfg-update -u` skips the root check so the harness and ebuild `src_test()` can run Tier B/C as an unprivileged user. `CFG_UPDATE_CONF` only selects the config file path; production `-u` still requires root.
 
 ### Manual single-scenario check (Gentoo host)
 

@@ -244,6 +244,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $opt_h = "novalue"; # if this option is used without arguments, "novalue" will change in ""
     my $opt_help = 0;
     my $opt_ebuild = 0;
+    my $opt_testsandbox = 0;
     my $opt_paludis = 0;
     my $opt_test_code = 0;
     my $opt_check_hosts = 0;
@@ -276,6 +277,7 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('disable-paludis-hook+'    => \$opt_disable_paludis_hook);
         GetOptions ('paludis+'                 => \$opt_paludis);
         GetOptions ('ebuild+'                  => \$opt_ebuild);
+        GetOptions ('testsandbox+'             => \$opt_testsandbox);
         GetOptions ('test+'                    => \$opt_test_code);
         GetOptions ('check+'                   => \$opt_check_hosts);
         GetOptions ('mount+'                   => \$opt_mount_hosts);
@@ -477,8 +479,8 @@ sub md5sum{ #ARGS# ("file")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</md5sum>\n"; }
 }
 
-sub sandbox_mode { # true when harness/ebuild tests override config via CFG_UPDATE_CONF
-    return (defined $ENV{CFG_UPDATE_CONF} && $ENV{CFG_UPDATE_CONF} ne "" && $opt_ebuild);
+sub sandbox_mode { # true when integration tests pass --testsandbox (with --ebuild)
+    return ($opt_testsandbox && $opt_ebuild);
 }
 
 sub root_only{ #ARGS# ("text")
@@ -2473,6 +2475,7 @@ sub show_debug_info {
         print "$tab"."opt_help                 = $opt_help\n";
         print "$tab"."opt_test_code            = $opt_test_code\n";
         print "$tab"."opt_ebuild               = $opt_ebuild\n";
+        print "$tab"."opt_testsandbox          = $opt_testsandbox\n";
         print "$tab"."opt_check_hosts          = $opt_check_hosts\n";
         print "$tab"."opt_mount_hosts          = $opt_mount_hosts\n";
         print "$tab"."opt_unmount_hosts        = $opt_unmount_hosts\n";
