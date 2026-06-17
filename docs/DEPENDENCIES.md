@@ -120,6 +120,27 @@ requires 'Term::ANSIColor';
 requires 'Term::ReadKey';
 ```
 
+## Test harness (stage 6)
+
+Run from a git checkout (no root required):
+
+```bash
+./test/run-tests.sh
+```
+
+Gentoo ebuild (`gentoo/cfg-update-1.9.1-r2.ebuild`):
+
+```bash
+FEATURES=test USE=test emerge --oneshot /path/to/cfg-update-1.9.1-r2.ebuild
+```
+
+| Requirement | Gentoo package | Used in |
+|-------------|----------------|---------|
+| `bash` | `app-shells/bash` | `run-tests.sh`, `lint-fixtures.sh` |
+| `diff3` | `sys-apps/diffutils` | Tier C stage 2 merge |
+| `md5sum` | `sys-apps/coreutils` | Fixture lint |
+| `shellcheck` | `dev-util/shellcheck` | Tier 0 (optional; skipped if absent) |
+
 ## Verify dependencies
 
 On a Gentoo system with cfg-update installed:

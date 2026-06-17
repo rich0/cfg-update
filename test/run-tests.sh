@@ -1,6 +1,6 @@
 #!/bin/bash
 # Integration test harness for cfg-update fixtures.
-# Tier 0/A: no root required. Tier B/C: root optional (see --require-root).
+# All tiers run without root when cfg-update is invoked with --testsandbox (stage 6c).
 
 set -euo pipefail
 
@@ -13,8 +13,8 @@ LINT_FIXTURES="$REPO_ROOT/test/lint-fixtures.sh"
 PASS=0
 FAIL=0
 SKIP=0
-REQUIRE_ROOT=0
-ROOT_TIERS_SKIPPED=0
+REQUIRE_FULL=0
+FULL_TIERS_SKIPPED=0
 SANDBOX=""
 EXPECTED_MARKER_COUNT=12
 
@@ -34,16 +34,16 @@ require_cmd() {
 pass() { echo "PASS: $*"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $*" >&2; FAIL=$((FAIL + 1)); }
 skip() { echo "SKIP: $*"; SKIP=$((SKIP + 1)); }
-skip_root() { skip "$@"; ROOT_TIERS_SKIPPED=$((ROOT_TIERS_SKIPPED + 1)); }
+skip_tier() { skip "$@"; FULL_TIERS_SKIPPED=$((FULL_TIERS_SKIPPED + 1)); }
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --require-root) REQUIRE_ROOT=1; shift ;;
+            --full|--require-root) REQUIRE_FULL=1; shift ;;
             -h|--help)
-                echo "Usage: $0 [--require-root]"
-                echo "  Default: Tier B/C skipped without root is OK."
-                echo "  --require-root: fail if root tiers were skipped."
+                echo "Usage: $0 [--full]"
+                echo "  Default: run all tiers (0/A/B/C); no root required."
+                echo "  --full: alias --require-root; fail if Tier B/C were skipped."
                 exit 0
                 ;;
             *) die "unknown argument: $1 (try --help)" ;;
@@ -175,7 +175,7 @@ run_cfg_update() {
     CFG_UPDATE_CONF="$SANDBOX/etc/cfg-update.conf" \
     CFG_UPDATE_HOSTS="$HOSTS_FILE" \
     PATH="$SANDBOX/bin:$PATH" \
-    perl "$CFG_UPDATE" --ebuild "${extra_args[@]}"
+    perl "$CFG_UPDATE" --ebuild --testsandbox "${extra_args[@]}"
 }
 
 tier0_static() {
@@ -346,11 +346,6 @@ tier_a_ancestor_backups() {
 
 tier_b_pretend_auto() {
     echo "=== Tier B: pretend automatic (-p -au) ==="
-    if [[ "$(id -u)" -ne 0 ]]; then
-        skip_root "tier B requires root"
-        return
-    fi
-
     setup_sandbox all auto
     local output
     output="$(run_cfg_update -p -au 2>&1)" || true
@@ -367,10 +362,6 @@ tier_b_pretend_auto() {
 
 tier_c_execute_auto() {
     echo "=== Tier C: execute automatic (-au) ==="
-    if [[ "$(id -u)" -ne 0 ]]; then
-        skip_root "tier C requires root"
-        return
-    fi
     require_cmd diff3
 
     setup_sandbox stage1-unmodified-text auto
@@ -421,8 +412,8 @@ main() {
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
-    if [[ "$REQUIRE_ROOT" -eq 1 && "$ROOT_TIERS_SKIPPED" -gt 0 ]]; then
-        fail "--require-root set but $ROOT_TIERS_SKIPPED root tier(s) were skipped"
+    if [[ "$REQUIRE_FULL" -eq 1 && "$FULL_TIERS_SKIPPED" -gt 0 ]]; then
+        fail "--full set but $FULL_TIERS_SKIPPED tier(s) were skipped"
     fi
     [[ "$FAIL" -eq 0 ]]
 }

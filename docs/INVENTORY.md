@@ -329,7 +329,7 @@ Legacy archive [`test.tgz`](../test.tgz) (still shipped in the ebuild) contained
 
 Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (ancestors), `checksum.index.entry`, and `scenario.md`. Combined index: `test/fixtures/checksum.index.seed`. Legacy setup script: `test/fixtures/legacy/prepare_cfg-update_test`.
 
-**Stage 6b (done):** [`test/run-tests.sh`](../test/run-tests.sh) Tier 0/A (no root), [`test/lint-fixtures.sh`](../test/lint-fixtures.sh); Tier B/C need root until 6c sandbox bypass. CI/Renovate deferred.
+**Stage 6b (done):** [`test/run-tests.sh`](../test/run-tests.sh) Tier 0/A, [`test/lint-fixtures.sh`](../test/lint-fixtures.sh). **Stage 6c:** sandbox `root_only` bypass for `-u` with `--testsandbox` + `--ebuild`; ebuild `src_test()` via `FEATURES=test`. CI/Renovate deferred.
 
 ---
 
@@ -360,7 +360,7 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
 | 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
-| 6 | `refactor/stage-6-tests` | ~~Fixtures, harness, `CFG_UPDATE_CONF`~~ **In progress**; validate on Gentoo; CI/Renovate deferred |
+| 6 | `refactor/stage-6-tests` / `refactor/stage-6c-sandbox-tests` | Fixtures, harness, sandbox tests, ebuild `src_test`; CI/Renovate deferred |
 
 ---
 

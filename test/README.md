@@ -43,30 +43,30 @@ Fixture lint: [`lint-fixtures.sh`](lint-fixtures.sh) — structure, MD5 vs `chec
 **Requirements:** Perl (`Term::ANSIColor`, `Term::ReadKey`), `diff3`, `grep`, `find`, `md5sum`.
 
 ```bash
-# From repo root — Tier 0/A only (no root)
+# From repo root — full suite (no root required)
 ./test/run-tests.sh
 
-# Full suite including auto-update execute tests (Tier B/C)
-sudo ./test/run-tests.sh
+# Ebuild / CI: fail if any tier was skipped
+./test/run-tests.sh --full
 
-# CI / Gentoo host: fail if root tiers were skipped
-sudo ./test/run-tests.sh --require-root
+# Gentoo ebuild (FEATURES=test USE=test)
+FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 ```
 
-| Tier | What | Privilege | Checks |
-|------|------|-----------|--------|
-| 0 | static + lint | user | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
-| A | `-lv`, `-s` | user | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
-| B | `-p -au` | root | Stages 1–2 pretend; live files unchanged |
-| C | `-au` | root | Stage 1 replace + stage 2 diff3 merge (no conflict markers) |
+| Tier | What | Checks |
+|------|------|--------|
+| 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
+| A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
+| B | `-p -au` | Stages 1–2 pretend; live files unchanged |
+| C | `-au` | Stage 1 replace + stage 2 diff3 merge (no conflict markers) |
 
-Without root, Tier B/C are skipped and the harness exits 0. Use `--require-root` when B/C must run (e.g. on a Gentoo CI worker).
+Tier B/C pass `--testsandbox` with `--ebuild` so `-u` skips the root check inside the temp sandbox.
 
 The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 
-### cfg-update freeze (stage 6b)
+### Sandbox mode (stage 6c)
 
-During harness expansion, `cfg-update` is frozen except for `CFG_UPDATE_CONF` and `CFG_UPDATE_HOSTS` env overrides. Sandbox root bypass for non-root Tier B/C is planned for stage 6c (ebuild `FEATURES=test`).
+When `--testsandbox` and `--ebuild` are passed, `cfg-update -u` skips the root check so the harness and ebuild `src_test()` can run Tier B/C as an unprivileged user. `CFG_UPDATE_CONF` only selects the config file path; production `-u` still requires root.
 
 ### Manual single-scenario check (Gentoo host)
 

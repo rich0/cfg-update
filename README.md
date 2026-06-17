@@ -121,9 +121,9 @@ The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.9.1
 # Validate Perl syntax
 perl -c cfg-update
 
-# Integration tests (Tier 0/A need no root; B/C need root)
+# Integration tests (full suite, no root required)
 ./test/run-tests.sh
-sudo ./test/run-tests.sh --require-root
+./test/run-tests.sh --full   # fail if any tier skipped (ebuild/CI)
 
 # See test/README.md for fixture layout and scenario docs
 ```

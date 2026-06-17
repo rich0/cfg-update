@@ -5,6 +5,7 @@
 # Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
 # PV 1.9.0 is tagged; 1.9.1 is the current development line — do not tag without approval.
 # Stage 5: Paludis maskdir fix, hardened install_all_pre hook script.
+# Stage 6c: FEATURES=test integration harness via test/run-tests.sh.
 
 EAPI=8
 
@@ -15,7 +16,15 @@ SRC_URI="https://github.com/rich0/cfg-update/archive/${PV}.tar.gz -> ${P}.tgz"
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~amd64 ~arm ~arm64 ~ppc ~x86"
-IUSE="X"
+IUSE="test X"
+
+BDEPEND="
+	test? (
+		app-shells/bash
+		sys-apps/diffutils
+		dev-perl/Term-ANSIColor
+	)
+"
 
 RDEPEND="
 	dev-perl/TermReadKey
@@ -43,6 +52,16 @@ pkg_postrm() {
 	ewarn "If you want to permanently remove cfg-update from your system"
 	ewarn "you should remove the index file /var/lib/cfg-update/checksum.index"
 	echo
+}
+
+src_test() {
+	if ! use test; then
+		ewarn "Skipping tests (USE=-test)"
+		return
+	fi
+
+	einfo "Running cfg-update integration test harness"
+	"${S}"/test/run-tests.sh --full || die "Integration tests failed"
 }
 
 src_install() {
