@@ -22,7 +22,7 @@ BDEPEND="
 	test? (
 		app-shells/bash
 		sys-apps/diffutils
-		dev-perl/Term-ANSIColor
+		virtual/perl-Term-ANSIColor
 	)
 "
 
