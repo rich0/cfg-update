@@ -39,15 +39,6 @@ List backup files from previous updates. These backups are stored in /var/lib/cf
 .B
 .IP \-r,\ \-\-restore\ [x]
 Add a number from the \fB\-b\fP output to restore a specific file.
-.B
-.IP \-\-mount
-\fBDEPRECATED.\fR Mounts the remote hosts specified in /etc/cfg\-update.hosts. Multi\-host sshfs support will be removed in a future release; run cfg\-update on each host directly.
-.B
-.IP \-\-check
-\fBDEPRECATED.\fR Checks the remote hosts for problems and shows their status.
-.B
-.IP \-\-unmount
-\fBDEPRECATED.\fR Unmounts the remote hosts specified in /etc/cfg\-update.hosts
 
 .SH "OPTIONS"
 .B
@@ -59,9 +50,6 @@ Force cfg\-update to only use the automatic stages (1,2) for updating. (only use
 .B
 .IP \-m,\ \-\-manual\-only
 Force cfg\-update to only use the manual stages (3,4,5) for updating. (only useful in combination with the \fB\-u\fP option)
-.B
-.IP \-h,\ \-\-host [x or x-y]
-\fBDEPRECATED.\fR Include sshfs mounted remote hosts (combine with \-l, \-u, \-b, \-r). Multi\-host updates from one machine are deprecated. For legacy configuration see: /etc/cfg\-update.hosts
 .B
 .IP \-p,\ \-\-pretend
 This option allows you to see what actions cfg\-update will take on the configuration files.
@@ -117,29 +105,6 @@ Lists all backups. You can take a number and use that with \fB\-r\fR to restore 
 .IP cfg\-update\ \-r77
 This will restore the 77th backup listed in the \fB\-b\fR output. cfg\-update will restore both the previous configuration file and the previous ._cfg0000_file so that you'll be able to retry the update.
 
-.SH "USAGE EXAMPLES FOR UPDATING MULTIPLE MACHINES"
-.B
-.IP cfg\-update\ \-h0\ \-l
-Lists all updates for localhost.
-.B
-.IP cfg\-update\ \-h1\ \-l
-Lists all updates for remote host 1.
-.B
-.IP cfg\-update\ \-h0\-100\ \-l
-Lists all updates for localhost and remote hosts 1 to 100.
-.B
-.IP cfg\-update\ \-h1\-100\ \-l
-Lists all updates for remote hosts 1 to 100.
-.B
-.IP cfg\-update\ \-h1-100\ \-u
-Starts the update session for remote hosts 1 to 10.
-.B
-.IP cfg\-update\ \-h1\ \-b
-Lists all backups for remote host 1. You can take a number and use that with \fB\-r\fR to restore that particular file.
-.B
-.IP cfg\-update\ \-h1\ \-r77
-This will restore the 77th backup on remote host 1, listed in the \fB\-b\fR output. cfg\-update will restore both the previous configuration file and the previous ._cfg0000_file so that you'll be able to retry the update.
-
 .SH "STAGE1"
 .LP
 In Stage1 cfg\-update will look at the md5\-checksum of the current configuration files. Portage stores these checksums when it installs files. If a checksum hasn't changed it means that the file hasn't been modified and does not contain customized settings. These files will be replaced with the new version automatically.
@@ -174,7 +139,6 @@ This enables cfg\-update to update it's checksum index before one or more new pa
 
 .SH "SEE ALSO"
 /etc/cfg-update.conf
-/etc/cfg-update.hosts
 https://github.com/rich0/cfg-update
 
 .SH "LICENSE"

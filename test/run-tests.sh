@@ -8,7 +8,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIXTURES="$REPO_ROOT/test/fixtures"
 INDEX_FIXTURE="$FIXTURES/index-portage"
 CFG_UPDATE="$REPO_ROOT/cfg-update"
-HOSTS_FILE="$REPO_ROOT/test/cfg-update.hosts"
 LINT_FIXTURES="$REPO_ROOT/test/lint-fixtures.sh"
 
 PASS=0
@@ -169,6 +168,14 @@ BACKUP_PATH = $backup
 EOF
 }
 
+install_portageq_mock() {
+    cat >"$SANDBOX/bin/portageq" <<'EOF'
+#!/bin/bash
+echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\" \"${CFG_UPDATE_TEST_SANDBOX}/etc/test2\""
+EOF
+    chmod +x "$SANDBOX/bin/portageq"
+}
+
 setup_sandbox() {
     local mode="${1:-all}"  # all | scenario name
     local stages="${2:-all}"
@@ -176,13 +183,10 @@ setup_sandbox() {
     SANDBOX="$(mktemp -d)"
     export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
 
-    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/var/lib/cfg-update/backups/etc/test" "$SANDBOX/bin"
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test" "$SANDBOX/bin"
 
-    cat >"$SANDBOX/bin/portageq" <<'EOF'
-#!/bin/bash
-echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\""
-EOF
-    chmod +x "$SANDBOX/bin/portageq"
+    install_portageq_mock
 
     deploy_backups() {
         local scenario="$1"
@@ -232,10 +236,38 @@ setup_sandbox_no_index() {
         "$SANDBOX/var/lib/cfg-update/checksum.index"
 }
 
+setup_multi_config_protect_sandbox() {
+    local stages="${1:-auto}"
+    SANDBOX="$(mktemp -d)"
+    export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
+
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test" \
+             "$SANDBOX/var/lib/cfg-update/backups/etc/test2" \
+             "$SANDBOX/bin"
+
+    install_portageq_mock
+
+    cp -a "$FIXTURES/stage1-unmodified-text/etc/." "$SANDBOX/etc/test/"
+    cp -a "$FIXTURES/stage1-unmodified-binary/etc/." "$SANDBOX/etc/test2/"
+    {
+        echo "Portage:0"
+        sed "s|/etc/test|${SANDBOX}/etc/test|g" \
+            "$FIXTURES/stage1-unmodified-text/checksum.index.entry"
+        sed "s|/etc/test|${SANDBOX}/etc/test2|g" \
+            "$FIXTURES/stage1-unmodified-binary/checksum.index.entry"
+    } >"$SANDBOX/var/lib/cfg-update/checksum.index"
+
+    write_test_config \
+        "$SANDBOX/etc/cfg-update.conf" \
+        "$SANDBOX/var/lib/cfg-update/checksum.index" \
+        "$SANDBOX/var/lib/cfg-update/backups" \
+        "$stages"
+}
+
 run_cfg_update() {
     local extra_args=("$@")
     CFG_UPDATE_CONF="$SANDBOX/etc/cfg-update.conf" \
-    CFG_UPDATE_HOSTS="$HOSTS_FILE" \
     PATH="$SANDBOX/bin:$PATH" \
     perl "$CFG_UPDATE" --ebuild --testsandbox "${extra_args[@]}"
 }
@@ -370,17 +402,13 @@ setup_index_sandbox() {
     SANDBOX="$(mktemp -d)"
     export CFG_UPDATE_TEST_SANDBOX="$SANDBOX"
 
-    mkdir -p "$SANDBOX/etc/test" \
+    mkdir -p "$SANDBOX/etc/test" "$SANDBOX/etc/test2" \
              "$SANDBOX/var/lib/cfg-update/backups" \
              "$SANDBOX/var/log" \
              "$SANDBOX/var/db/pkg/app-test/test-pkg-1.0" \
              "$SANDBOX/bin"
 
-    cat >"$SANDBOX/bin/portageq" <<'EOF'
-#!/bin/bash
-echo "\"${CFG_UPDATE_TEST_SANDBOX}/etc/test\""
-EOF
-    chmod +x "$SANDBOX/bin/portageq"
+    install_portageq_mock
 
     cp -a "$INDEX_FIXTURE/etc/test_unmodified_file" "$SANDBOX/etc/test/"
     if [[ "$with_marker" == yes ]]; then
@@ -592,6 +620,37 @@ tier_a_protected_dirs() {
     output="$(run_cfg_update -s 2>&1)" || true
     assert_output_matches "protected dirs lists sandbox etc/test" \
         "${SANDBOX}/etc/test" "$output"
+    assert_output_matches "protected dirs lists sandbox etc/test2" \
+        "${SANDBOX}/etc/test2" "$output"
+}
+
+tier_a_multi_config_protect() {
+    echo "=== Tier A: multi CONFIG_PROTECT dirs ==="
+    local output
+
+    setup_multi_config_protect_sandbox auto
+    output="$(run_cfg_update -s 2>&1)" || true
+    assert_output_matches "multi-dir: protected lists etc/test" \
+        "${SANDBOX}/etc/test" "$output"
+    assert_output_matches "multi-dir: protected lists etc/test2" \
+        "${SANDBOX}/etc/test2" "$output"
+
+    output="$(run_cfg_update -lv 2>&1)" || true
+    assert_output_matches "multi-dir: classifies marker in etc/test" \
+        'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*etc/test/._cfg0000_test_unmodified_file' "$output"
+    assert_output_matches "multi-dir: classifies marker in etc/test2" \
+        'Stage\[1\][[:space:]]+Unmodified Binary[[:space:]].*etc/test2/._cfg0000_test_unmodified_binary' "$output"
+
+    run_cfg_update -au >/dev/null
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "multi-dir: backup list includes etc/test file" \
+        'etc/test/test_unmodified_file' "$output"
+    assert_output_matches "multi-dir: backup list includes etc/test2 file" \
+        'etc/test2/test_unmodified_binary' "$output"
+    assert_output_matches "multi-dir: backup list has two numbered entries" \
+        '^[[:space:]]*1[[:space:]]' "$output"
+    assert_output_matches "multi-dir: backup list second entry" \
+        '^[[:space:]]*2[[:space:]]' "$output"
 }
 
 tier_a_ancestor_backups() {
@@ -801,6 +860,66 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/._cfg0000_test_link_2_link"
 }
 
+tier_f_backups_maintenance() {
+    echo "=== Tier F: backups and maintenance (-b, -r, --optimize-backups) ==="
+    local output backup_root
+
+    setup_sandbox stage2-3way-merge-success auto
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "backup list empty before update" \
+        'No \(._old-cfg_\*\) files found' "$output"
+
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "stage2 update created old backup" \
+        "$backup_root/._old-cfg_test_auto_3way_success"
+    assert_file_exists "stage2 update created new backup" \
+        "$backup_root/._new-cfg_test_auto_3way_success"
+
+    output="$(run_cfg_update -b 2>&1)" || true
+    assert_output_matches "backup list shows restored target path" \
+        'test_auto_3way_success' "$output"
+    assert_output_matches "backup list shows numbered entry" \
+        '^[[:space:]]*1[[:space:]]' "$output"
+
+    output="$(run_cfg_update_stdin $'y\n' -r 1 2>&1)" || true
+    assert_output_matches "restore completes" \
+        'Restore complete' "$output"
+    assert_file_equals "restore rewrote live config from backup" \
+        "$SANDBOX/etc/test/test_auto_3way_success" \
+        "$FIXTURES/stage2-3way-merge-success/etc/test_auto_3way_success"
+    assert_file_equals "restore rewrote cfg marker from backup" \
+        "$SANDBOX/etc/test/._cfg0000_test_auto_3way_success" \
+        "$FIXTURES/stage2-3way-merge-success/etc/._cfg0000_test_auto_3way_success"
+    assert_missing "restore removed old backup file" \
+        "$backup_root/._old-cfg_test_auto_3way_success"
+    assert_missing "restore removed new backup file" \
+        "$backup_root/._new-cfg_test_auto_3way_success"
+
+    setup_sandbox stage1-unmodified-text auto
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    output="$(run_cfg_update --optimize-backups 2>&1)" || true
+    assert_output_matches "optimize-backups creates ancestor for unmodified file" \
+        'Make file.*_new-cfg_test_unmodified_file' "$output"
+    assert_file_exists "optimize-backups wrote new-cfg backup" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_file_contains "optimize-backups backup matches live file" \
+        "$backup_root/._new-cfg_test_unmodified_file" "#version 1.0"
+
+    setup_sandbox stage1-unmodified-text
+    output="$(run_cfg_update --mount 2>&1)" || true
+    assert_output_not_matches "removed flag: --mount not accepted" \
+        'Mounts remote hosts|mount_hosts|sshfs' "$output"
+    assert_output_matches "removed flag: --mount shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    output="$(run_cfg_update -h1 -l 2>&1)" || true
+    assert_output_not_matches "removed flag: -h1 not accepted" \
+        'Value out of range in -h|sshfs|remote host' "$output"
+    assert_output_matches "removed flag: -h1 shows usage" \
+        'missing valid options|USAGE' "$output"
+}
+
 tier_e_index_portage() {
     echo "=== Tier E: Portage --index (-i) ==="
     local output golden index_before
@@ -872,11 +991,13 @@ main() {
     tier_a_per_scenario
     tier_a_no_index
     tier_a_protected_dirs
+    tier_a_multi_config_protect
     tier_a_ancestor_backups
     tier_b_pretend_auto
     tier_c_execute_auto
     tier_d_execute_manual
     tier_e_index_portage
+    tier_f_backups_maintenance
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
