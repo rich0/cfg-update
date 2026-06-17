@@ -58,15 +58,20 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
 | A | `-lv`, `-s` | Combined + per-scenario classify (12 markers), protected dirs, ancestor backups on disk |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
-| C | `-au` | Stage 1 replace + stage 2 diff3 merge (no conflict markers) |
+| C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
+| D | `-mu` + stdin | Stages 3–5 execute: replace/keep filesystem outcomes (non-interactive via sandbox STDIN) |
 
-Tier B/C pass `--testsandbox` with `--ebuild` so `-u` skips the root check inside the temp sandbox.
+Tier B/C/D pass `--testsandbox` with `--ebuild` so `-u` skips the root check inside the temp sandbox.
+
+### Golden `expected/` files
+
+Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`; Tier D drives manual stages by piping keys to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
 
 The harness prepends a mock `portageq` to `PATH` that returns the sandbox `etc/test` directory as `CONFIG_PROTECT`. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 
 ### Sandbox mode (stage 6c)
 
-When `--testsandbox` and `--ebuild` are passed, `cfg-update -u` skips the root check so the harness and ebuild `src_test()` can run Tier B/C as an unprivileged user. `CFG_UPDATE_CONF` only selects the config file path; production `-u` still requires root.
+When `--testsandbox` and `--ebuild` are passed, `cfg-update -u` skips the root check so the harness and ebuild `src_test()` can run Tier B/C/D as an unprivileged user. In the same mode, `readkey` reads from STDIN when piped (enabling Tier D). `CFG_UPDATE_CONF` only selects the config file path; production `-u` still requires root.
 
 ### Manual single-scenario check (Gentoo host)
 

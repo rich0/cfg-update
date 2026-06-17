@@ -403,7 +403,14 @@ $Term::ANSIColor::AUTORESET = 1;
 # Check the package manager hooks and enable them if possible (except when --ebuild option is used)...
     if ($opt_ebuild == 0) { &check_hooks; }
 # Check the mergetool (except when --ebuild option is used)...
-    if ($opt_ebuild == 0) { &check_tool; }
+    if ($opt_ebuild == 0) {
+        &check_tool;
+    } else {
+        # Sandbox tests use --ebuild; set capability flags without probing the host.
+        $tool_supports_2way = "yes";
+        $tool_supports_3way = "yes";
+        $tool_saves_mergefile_when_aborted = "no";
+    }
 
 ######################################################################################################################
 #                                   EXECUTE SELECTED RUNMODE SUBROUTINE                                              #
@@ -465,10 +472,15 @@ sub strip_comment{ #ARGS# ("linefromfile")
 
 sub readkey{
     if ($opt_d >= 1) { print "\n$tab"."<readkey>\n"; $tab = $tab."    "; print "$tab"; }
-    ReadMode 4; # Turn off controls keys
-    $key = ReadKey 0;
-    ReadMode 0; # Reset tty mode
-    print "$tab"."\n";                                       #
+    if (&sandbox_mode && !-t STDIN) {
+        chomp($key = <STDIN>);
+        print "$tab"."$key\n";
+    } else {
+        ReadMode 4; # Turn off controls keys
+        $key = ReadKey 0;
+        ReadMode 0; # Reset tty mode
+        print "$tab"."\n";                                       #
+    }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</readkey>\n"; }
 }
 

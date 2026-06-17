@@ -65,6 +65,40 @@ lint_scenario_structure() {
     fi
 }
 
+lint_expected_files() {
+    local scenario="$1"
+    local name
+    name="$(basename "$scenario")"
+    [[ -d "$scenario/expected" ]] || return 0
+    local count
+    count="$(find "$scenario/expected" -type f 2>/dev/null | wc -l)"
+    if [[ "$count" -ge 1 ]]; then
+        pass "$name: has $count expected result file(s)"
+    else
+        fail "$name: expected/ present but empty"
+    fi
+}
+
+lint_execute_scenarios_have_expected() {
+    local scenario
+    for scenario in \
+        stage1-unmodified-text \
+        stage1-unmodified-binary \
+        stage2-3way-merge-success \
+        stage2-3way-merge-conflict \
+        stage4-manual-2way \
+        stage4-custom-file \
+        stage5-modified-binary \
+        stage5-custom-binary \
+        stage5-link-to-file; do
+        if [[ ! -d "$FIXTURES/$scenario/expected" ]]; then
+            fail "$scenario: missing expected/ for execute-path tests"
+        else
+            pass "$scenario: expected/ present"
+        fi
+    done
+}
+
 lint_duplicate_markers() {
     local combined
     combined="$(mktemp)"
@@ -86,7 +120,9 @@ main() {
         [[ -d "$scenario/etc" ]] || continue
         lint_scenario_structure "$scenario"
         lint_index_entry "$scenario"
+        lint_expected_files "$scenario"
     done
+    lint_execute_scenarios_have_expected
     lint_duplicate_markers
     echo ""
     echo "Results: $PASS passed, $FAIL failed"
