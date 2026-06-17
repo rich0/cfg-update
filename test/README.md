@@ -37,7 +37,7 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 
 ## Running tests
 
-Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` / `CFG_UPDATE_HOSTS` (no writes to `/etc`).
+Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` (no writes to `/etc`).
 
 Fixture lint: [`lint-fixtures.sh`](lint-fixtures.sh) — structure, MD5 vs `checksum.index.entry`, duplicate marker detection. Invoked automatically as Tier 0.
 

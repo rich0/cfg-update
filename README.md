@@ -3,8 +3,7 @@
 I'm in the process of using an LLM to clean up some of the dead code branches here.
 I'm being conservative, but please use care before using the 1.9.0+ releases.  
 Feedback is welcome.  Eventually I might port this to python, but the initial focus is on trimming
-some of the features like sshfs that nobody uses.  A few obvious bugs were fixed, as well as 
-dilfridge's patch.
+unused legacy features.  A few obvious bugs were fixed, as well as dilfridge's patch.
 
 # cfg-update
 
@@ -12,7 +11,7 @@ A safe, staged alternative to Gentoo's `etc-update` for handling configuration f
 
 **Upstream:** Stephan van Boven (Gentoo, 2007)  
 **Maintained fork:** [rich0/cfg-update](https://github.com/rich0/cfg-update)  
-**Version:** 1.9.1 (development)  
+**Version:** 1.10.0 (development)
 **License:** GPL v2 ([COPYING](COPYING))
 
 ## What it does
@@ -55,7 +54,6 @@ This repository contains the script sources. On Gentoo, install via an ebuild/ov
 # Example manual install (adjust paths to taste)
 sudo install -m 755 cfg-update /usr/bin/cfg-update
 sudo install -m 644 cfg-update.conf /etc/cfg-update.conf
-sudo install -m 644 cfg-update.hosts /etc/cfg-update.hosts
 sudo install -m 644 cfg-update.8 /usr/share/man/man8/cfg-update.8
 sudo install -m 755 cfg-update_indexing /usr/lib/cfg-update/cfg-update_indexing
 sudo mandb
@@ -82,11 +80,10 @@ See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for required packages.
 | File | Purpose |
 |------|---------|
 | `/etc/cfg-update.conf` | Merge tool, stage toggles, backup/index paths |
-| `/etc/cfg-update.hosts` | Legacy sshfs remote hosts (**deprecated**; run cfg-update per host) |
 | `/var/lib/cfg-update/checksum.index` | MD5 index of protected files |
 | `/var/lib/cfg-update/backups/` | Per-update backups for 3-way merging |
 
-Template copies of the config files are in this repository: [`cfg-update.conf`](cfg-update.conf), [`cfg-update.hosts`](cfg-update.hosts).
+Template copy of the config file is in this repository: [`cfg-update.conf`](cfg-update.conf).
 
 ## Common commands
 
@@ -115,7 +112,7 @@ man cfg-update             # detailed manual
 
 This fork is being revived on isolated `refactor/stage-*` branches. See [docs/INVENTORY.md](docs/INVENTORY.md) for the cleanup roadmap.
 
-The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.9.1**). Release **1.9.0** is tagged; do not tag new versions without maintainer approval.
+The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.10.0**). Release **1.9.0** is tagged; do not tag new versions without maintainer approval.
 
 ```bash
 # Validate Perl syntax

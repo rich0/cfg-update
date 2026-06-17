@@ -42,12 +42,11 @@ flowchart LR
 Every invocation follows the same bootstrap (see `cfg-update` lines 69–420):
 
 1. **Load config** — Parse `/etc/cfg-update.conf` into globals (`MERGE_TOOL`, `ENABLE_STAGE*`, paths).
-2. **Load hosts** — Parse `/etc/cfg-update.hosts` into `@mount_point`, `@mount_cmd`, `@unmount_cmd`. Index `0` is always localhost.
-3. **Parse CLI** — `Getopt::Long` with bundling; flags parsed in a loop (up to 25 passes).
-4. **Select package manager** — Default Portage (`/var/log/emerge.log`). `--paludis` switches to Paludis (`/var/log/paludis.log`).
-5. **Ensure index exists** — If `/var/lib/cfg-update/checksum.index` is missing and not `--ebuild`, build it (requires root).
-6. **Run mode dispatch** — Jump to the subroutine for `-l`, `-u`, `-i`, etc.
-7. **Pre-flight (normal runs)** — Unless `--ebuild`:
+2. **Parse CLI** — `Getopt::Long` with bundling; flags parsed in a loop (up to 25 passes).
+3. **Select package manager** — Default Portage (`/var/log/emerge.log`). `--paludis` switches to Paludis (`/var/log/paludis.log`).
+4. **Ensure index exists** — If `/var/lib/cfg-update/checksum.index` is missing and not `--ebuild`, build it (requires root).
+5. **Run mode dispatch** — Jump to the subroutine for `-l`, `-u`, `-i`, etc.
+6. **Pre-flight (normal runs)** — Unless `--ebuild`:
    - `check_hooks` — Install/enable Portage and Paludis index hooks
    - `check_tool` — Verify merge tool exists; disable stages 3/4 if unsupported
 
@@ -211,12 +210,6 @@ These enable stage 2's 3-way merges on subsequent updates.
 | `--optimize-backups` | Remove redundant backups while keeping merge-capable pairs |
 | `--move-backups` | Migrate backup directory (used during package upgrades) |
 
-## Remote host support (deprecated since 1.9.1)
-
-The `-h` / `--host`, `--mount`, `--check`, and `--unmount` options support managing config updates on remote Gentoo systems mounted via sshfs. Configuration is in `/etc/cfg-update.hosts`.
-
-This feature is **deprecated** (runtime warnings since 1.9.1) and will be removed in a future release. Run `cfg-update` on each host directly. The historical HOWTO is preserved under git tag `1.9.0`.
-
 ## Key global paths
 
 | Variable | Default | Set in |
@@ -236,7 +229,6 @@ This feature is **deprecated** (runtime warnings since 1.9.1) and will be remove
 |-----------|----------------|
 | `cfg-update` | `/usr/bin/cfg-update` |
 | `cfg-update.conf` | `/etc/cfg-update.conf` |
-| `cfg-update.hosts` | `/etc/cfg-update.hosts` |
 | `cfg-update.8` | `/usr/share/man/man8/cfg-update.8` |
 | `cfg-update_indexing` | `/usr/lib/cfg-update/cfg-update_indexing` |
 

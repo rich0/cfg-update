@@ -10,7 +10,7 @@
 
 ## Executive summary
 
-`cfg-update` is a **~2,490-line Perl monolith** that automates Gentoo config-file updates after package merges. It is an alternative to Portage's `etc-update`, with a 5-stage pipeline (automatic overwrite, automatic diff3, manual 3-way, manual 2-way, manual binary/link handling), checksum indexing, backup/restore, and optional multi-host updates over sshfs.
+`cfg-update` is a **single-host Perl monolith** that automates Gentoo config-file updates after package merges. It is an alternative to Portage's `etc-update`, with a 5-stage pipeline (automatic overwrite, automatic diff3, manual 3-way, manual 2-way, manual binary/link handling), checksum indexing, and backup/restore.
 
 The repository has **no package-manager manifest** (no `package.json`, `cpanfile`, ebuild). Dependencies are system binaries and Perl core/extension modules. Several files reflect **deprecated installation paths** (emerge alias in `/root/.bashrc`, PHP/bash emerge wrappers) superseded by the `/etc/portage/bashrc` hook installed automatically at runtime.
 
@@ -23,7 +23,6 @@ The repository has **no package-manager manifest** (no `package.json`, `cpanfile
 | [`cfg-update`](../cfg-update) | 2490 | Main Perl program (54 subroutines) | **Yes** — core |
 | [`cfg-update.conf`](../cfg-update.conf) | 167 | Config template (installed as `/etc/cfg-update.conf`) | **Yes** |
 | [`cfg-update.8`](../cfg-update.8) | 192 | Man page | **Yes** (update stale refs in stage 2) |
-| [`cfg-update.hosts`](../cfg-update.hosts) | ~40 | Legacy sshfs mount definitions | **Deprecated** (stage 4); HOWTO preserved at git tag 1.9.0 |
 | [`cfg-update_indexing`](../cfg-update_indexing) | 12 | Paludis hook script (copied to `/usr/share/paludis/hooks/...`) | **Yes** if Paludis kept |
 | ~~emerge wrappers / phphelper~~ | — | Legacy emerge alias wrappers | **Removed** (stage 3) |
 | [`ChangeLog`](../ChangeLog) | 235 | Gentoo ebuild changelog (historical) | **Yes** (historical) |
@@ -49,8 +48,7 @@ The repository has **no package-manager manifest** (no `package.json`, `cpanfile
 ```mermaid
 flowchart TD
     start[cfg-update invoked] --> loadConf[Load /etc/cfg-update.conf]
-    loadConf --> loadHosts[Parse /etc/cfg-update.hosts mount points]
-    loadHosts --> parseArgs[Parse CLI flags via Getopt::Long]
+    loadConf --> parseArgs[Parse CLI flags via Getopt::Long]
     parseArgs --> paludisOpt{--paludis?}
     paludisOpt -->|yes| setPaludis[pkg_manager=Paludis, log=/var/log/paludis.log]
     paludisOpt -->|no| setPortage[pkg_manager=Portage, log=/var/log/emerge.log]
@@ -81,16 +79,12 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `-s`, `--show-protected-dirs` | `list_dirs` | No | Low (debug) |
 | `-a`, `--automatic-only` | (modifier for `-u`) | Yes | Medium (cron) |
 | `-m`, `--manual-only` | (modifier for `-u`) | Yes | Low |
-| `-h`, `--host` | (modifier: host index/range) | Varies | **Low** — sshfs |
 | `-p`, `--pretend` | (modifier) | Varies | Medium |
 | `-f`, `--force` | (modifier for index) | Yes | Medium |
 | `-v`, `--verbose` | STDERR visible | No | Medium |
 | `-d`, `--debug` | `show_debug_info` | No | Low |
 | `-t`, `--tool` | Override merge tool | Varies | Medium |
 | `--paludis` | Sets Paludis mode for `--index` | Yes | Low |
-| `--mount` | `mount_hosts` | Yes | **Deprecate** |
-| `--check` | `check_hosts` | Yes | **Deprecate** |
-| `--unmount` | `unmount_hosts` | Yes | **Deprecate** |
 | `--move-backups` | `move_backups` | Yes | Low (migration) |
 | `--optimize-backups` | `optimize_backups` | Yes | Medium |
 | `--disable-portage-hook` | `disable_portage_hook` | Yes | Medium (uninstall) |
@@ -149,22 +143,11 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `tool_intro` | 2148 | User guidance per tool |
 | `diff_two_files`, `diff_three_files` | 2121–2148 | Ad-hoc diff mode |
 
-### Remote hosts / sshfs (deprecated since 1.9.1, not deleted yet)
-
-| Subroutine | Lines | Purpose |
-|------------|------:|---------|
-| `check_hosts` | 721 | Validate remote mount setup |
-| `remote_host_checks` | 735 | Per-host checks |
-| `mount_hosts` | 769 | Run MOUNT_CMD from hosts file |
-| `unmount_hosts` | 800 | Run UNMOUNT_CMD |
-
-Remote host arrays (`@mount_point`, `@mount_cmd`, `@unmount_cmd`) are loaded at startup from [`cfg-update.hosts`](../cfg-update.hosts) lines 111–146. Host index `0` is always localhost.
-
 ### Utilities (keep)
 
 | Subroutine | Purpose |
 |------------|---------|
-| `strip`, `strip_comment` | Config line parsing |
+| `strip` | Config line parsing |
 | `readkey` | Interactive input |
 | `md5sum` | Checksum helper |
 | `root_only` | UID check |
@@ -279,7 +262,6 @@ These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-
 | `stty` | Optional | sdiff width |
 | Merge tool (meld, etc.) | **Yes** for manual stages | `launch_tool` |
 | `cave` | Optional | Paludis detection |
-| `sshfs`, `fusermount` | Optional | Remote hosts only |
 | `php` | Optional | Only for deprecated phphelper |
 
 ### Gentoo packages (documented for DEPENDENCIES.md)
@@ -289,7 +271,6 @@ These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-
 | `app-portage/cfg-update` (ebuild, external) | Install wrapper — not in this repo |
 | `sys-apps/findutils` | `xargs` for index (per ChangeLog) |
 | `dev-util/meld` (recommended) | Default merge tool |
-| `sys-fs/sshfs-fuse` | Remote hosts only |
 | `dev-perl/Term-ANSIColor`, `dev-perl/TermReadKey` | Perl deps |
 
 ---
@@ -303,7 +284,6 @@ These were installed as `/usr/bin/emerge` replacements via `.bashrc` alias (pre-
 | [`cfg-update`](../cfg-update) L43–44 | Code defaults to xxdiff; config defaults to meld | stage 2 (document) or stage 3 (align code default) |
 | [`cfg-update`](../cfg-update) L635–637 | Error text recommends xxdiff | stage 3 |
 | Wrappers + phphelper | "disable alias in /root/.bashrc" | stage 3 (remove files) or update if kept |
-| [`cfg-update.hosts`](../cfg-update.hosts) L63 | `--enable-portage-hook` — **flag does not exist** | stage 4 (fix docs) |
 | ChangeLog vs code | Paludis hook path naming | stage 5 |
 | [`cfg-update.8`](../cfg-update.8) L173 | Index path `/usr/lib/cfg-update/checksum.index` | stage 2 — actual default is `/var/lib/cfg-update/checksum.index` |
 
@@ -343,7 +323,7 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | Backup/restore/optimize | **Yes** | Required for 3-way merge |
 | `-l`, `-u`, `-a`, `-p` | **Yes** | Daily usage |
 | Paludis hook + `--paludis` | **Yes** (minimal) | Low cost if path valid |
-| sshfs multi-host (`-h`, `--mount`) | **Deprecated** | Runtime warnings since 1.9.1; removal TBD |
+| ~~sshfs multi-host (`-h`, `--mount`)~~ | — | Removed (1.10.0); HOWTO at git tag 1.9.0 |
 | ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
 | ~~PHP helper~~ | — | Removed (stage 3) |
 | `--test` stub | **Repurpose** | Hook for automated smoke tests (stage 6) |
@@ -359,6 +339,7 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | 2 | `refactor/stage-2-docs` | README, ARCHITECTURE.md, DEPENDENCIES.md; fix man page stale paths |
 | 3 | `refactor/stage-3-dead-code` | ~~Remove wrappers, phphelper, `breakpoint`; fix xxdiff error text~~ **Done** |
 | 4 | `refactor/stage-4-deprecations` | ~~Runtime warnings; slim hosts file~~ **Done** (1.9.1) |
+| 7 | `refactor/prune-sshfs` | ~~Remove sshfs multi-host support~~ **Done** (1.10.0) |
 | 5 | `refactor/stage-5-paludis` | ~~Paludis maskdir fix, hook hardening, best-effort docs~~ **Done** (1.9.1) |
 | 6 | `refactor/stage-6-tests` / `refactor/stage-6c-sandbox-tests` | Fixtures, harness, sandbox tests, ebuild `src_test`; CI/Renovate deferred |
 

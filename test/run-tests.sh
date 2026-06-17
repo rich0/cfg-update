@@ -8,7 +8,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIXTURES="$REPO_ROOT/test/fixtures"
 INDEX_FIXTURE="$FIXTURES/index-portage"
 CFG_UPDATE="$REPO_ROOT/cfg-update"
-HOSTS_FILE="$REPO_ROOT/test/cfg-update.hosts"
 LINT_FIXTURES="$REPO_ROOT/test/lint-fixtures.sh"
 
 PASS=0
@@ -269,7 +268,6 @@ setup_multi_config_protect_sandbox() {
 run_cfg_update() {
     local extra_args=("$@")
     CFG_UPDATE_CONF="$SANDBOX/etc/cfg-update.conf" \
-    CFG_UPDATE_HOSTS="$HOSTS_FILE" \
     PATH="$SANDBOX/bin:$PATH" \
     perl "$CFG_UPDATE" --ebuild --testsandbox "${extra_args[@]}"
 }
@@ -907,6 +905,19 @@ tier_f_backups_maintenance() {
         "$backup_root/._new-cfg_test_unmodified_file"
     assert_file_contains "optimize-backups backup matches live file" \
         "$backup_root/._new-cfg_test_unmodified_file" "#version 1.0"
+
+    setup_sandbox stage1-unmodified-text
+    output="$(run_cfg_update --mount 2>&1)" || true
+    assert_output_not_matches "removed flag: --mount not accepted" \
+        'Mounts remote hosts|mount_hosts|sshfs' "$output"
+    assert_output_matches "removed flag: --mount shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    output="$(run_cfg_update -h1 -l 2>&1)" || true
+    assert_output_not_matches "removed flag: -h1 not accepted" \
+        'Value out of range in -h|sshfs|remote host' "$output"
+    assert_output_matches "removed flag: -h1 shows usage" \
+        'missing valid options|USAGE' "$output"
 }
 
 tier_e_index_portage() {

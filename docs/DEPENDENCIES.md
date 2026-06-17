@@ -93,15 +93,6 @@ Only needed if you use Paludis instead of (or alongside) Portage:
 
 `cfg-update` auto-installs the hook when `cave` is present. This path is **not verified** on a Paludis host in the current fork — report issues on GitHub if hooks fail.
 
-### Remote host management (deprecated since 1.9.1)
-
-| Package | Purpose |
-|---------|---------|
-| `sys-fs/sshfs` | Legacy `-h` / `--mount` remote updates only |
-| `net-misc/openssh` | SSH access to remote hosts |
-
-Not required for single-host use. Deprecated; emits runtime warnings.
-
 ## Dependency tracking and Renovate
 
 This project has no machine-readable dependency manifest today. Automated update tooling applies only to:

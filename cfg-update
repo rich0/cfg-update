@@ -34,14 +34,12 @@ $Term::ANSIColor::AUTORESET = 1;
 #                                          TODO_LIST                                                                 #
 ######################################################################################################################
 
-# ADD subroutine that detects similar updates on remote hosts, then offer to clone the update on these remote hosts
-
 ######################################################################################################################
 #                                          GLOBAL VARIABLES AND SETTINGS                                             #
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.9.1";
+    my $version           = "1.10.0";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
     my $website           = "http://people.zeelandnet.nl/xentric";
@@ -61,9 +59,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $index_file        = "/var/lib/cfg-update/checksum.index";
     my $settings          = "/etc/cfg-update.conf";
     my $log_file          = "/var/lib/cfg-update/cfg-update.log";
-    my $hosts_file        = "/etc/cfg-update.hosts";
     $settings   = $ENV{CFG_UPDATE_CONF}  if defined $ENV{CFG_UPDATE_CONF}  && $ENV{CFG_UPDATE_CONF}  ne "";
-    $hosts_file = $ENV{CFG_UPDATE_HOSTS} if defined $ENV{CFG_UPDATE_HOSTS} && $ENV{CFG_UPDATE_HOSTS} ne "";
     my $enable_backups    = "yes";
     my $enable_stage1     = "yes";
     my $enable_stage2     = "yes";
@@ -95,7 +91,6 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*ENABLE_STAGE5\s*=\s*/i)     { $enable_stage5     = &strip($'); }
         if ($line =~ /^\s*VIEW_TOOL\s*=\s*/i)         { $view_tool         = &strip($'); }
         if ($line =~ /^\s*BACKUP_PATH\s*=\s*/i)       { $backup_path       = &strip($'); }
-        if ($line =~ /^\s*HOSTS_FILE\s*=\s*/i)        { $hosts_file        = &strip($'); }
         if ($line =~ /^\s*INDEXFILE\s*=\s*/i)         { $index_file        = &strip($'); }
         if ($line =~ /^\s*INDEX_FILE\s*=\s*/i)        { $index_file        = &strip($'); }
         if ($line =~ /^\s*PKG_DB\s*=\s*/i)            { $pkg_db            = &strip($'); }
@@ -124,42 +119,6 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($backup_path =~ /\/$/) { chop($backup_path); }   # remove trailing slash if found
 # Check if backup_path exists...
     if (! -e $backup_path) { `mkdir -p $backup_path`; }
-# Get remote hosts information from /etc/cfg-update.hosts...
-    my @mount_point;
-    my @mount_cmd;
-    my @unmount_cmd;
-    my $mount_first    = 0;
-    my $mount_last     = 0;
-    my $mount_count    = 0;
-       $mount_point[0] = "";          # set localhost as the first host (0 = first element)
-       $mount_cmd[0]   = "";          # leave empty for localhost
-       $unmount_cmd[0] = "";          # leave empty for localhost
-    if (-f "$hosts_file") {
-        open(FILE, "$hosts_file") || die "Can't open file: $hosts_file!\n";
-        my $i = 1;          # start adding hosts from second element (first element is localhost!)
-        while (my $line = <FILE>) {
-            chomp $line;
-            if ($line =~ /^\s*MOUNT_POINT\s*=\s*/i) { $mount_point[$i] = &strip($'); $i++; }
-        }
-        close(FILE);        # NOTE: if the -n option is not found the @mount_point list will be emptied in sub check_flags!
-        for (my $i = 1; $i < @mount_point; $i++) {
-            if ($mount_point[$i] !~ /\/$/) { $mount_point[$i] = $mount_point[$i]."/"; }   # add a trailing slash if it's missing
-        }
-        open(FILE, $hosts_file) || die "Can't open file: $hosts_file!\n";
-        $i = 1;
-        while (my $line = <FILE>) {
-            chomp $line;
-            if ($line =~ /^\s*MOUNT_CMD\s*=\s*/i)   { $mount_cmd[$i] = &strip_comment($'); $i++; }
-        }
-        close(FILE);
-        open(FILE, $hosts_file) || die "Can't open file: $hosts_file!\n";
-        $i = 1;
-        while (my $line = <FILE>) {
-            chomp $line;
-            if ($line =~ /^\s*UNMOUNT_CMD\s*=\s*/i) { $unmount_cmd[$i] = &strip_comment($'); $i++; }
-        }
-        close(FILE);        # NOTE: if the -n option is not found the @mount_point list will be emptied in sub check_flags!
-    }
 # Other global variables...
     my $bar1          = "________________________________________________________________________________\n";
     my $bar2          = "--------------------------------------------------------------------------------";
@@ -196,7 +155,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $merge_conflict;
     my $ancestor_found;
     my $cmd;
-    my $host_path;
     my @dir;
     my @maskdir;
     my @list;
@@ -214,7 +172,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $path;
     my $file;
     my $file1;        # /path/file                  <--  current /etc/foo
-    my $file1_without_host; #                       <--  if file is /remote_host//etc/foo the host will be stripped
     my $file2;        # /path/._cfg0000_file        <--  current /etc/._cfg0000_foo
     my $file3;        # /path/._old-cfg_file        <--  previous /etc/foo
     my $file4;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
@@ -227,7 +184,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $index_pkg = "";
     my $tab       = "";
     my $env       = " ";
-    my $sshfs_deprecation_warned = 0;
 
 ######################################################################################################################
 #                                          COMMANDLINE ARGUMENT HANDLING                                            #
@@ -247,15 +203,11 @@ $Term::ANSIColor::AUTORESET = 1;
     my $opt_p = 0;
     my $opt_v = 0;
     my $opt_t = "novalue"; # if this option is used without arguments, "novalue" will change in ""
-    my $opt_h = "novalue"; # if this option is used without arguments, "novalue" will change in ""
     my $opt_help = 0;
     my $opt_ebuild = 0;
     my $opt_testsandbox = 0;
     my $opt_paludis = 0;
     my $opt_test_code = 0;
-    my $opt_check_hosts = 0;
-    my $opt_mount_hosts = 0;
-    my $opt_unmount_hosts = 0;
     my $opt_move_backups = 0;
 #    my $opt_enable_portage_hook = 0;
 #    my $opt_enable_paludis_hook = 0;
@@ -273,7 +225,6 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('r|restore:i'              => \$opt_r);
         GetOptions ('a|automatic-only+'        => \$opt_a);
         GetOptions ('m|manual-only+'           => \$opt_m);
-        GetOptions ('h|host=s'                 => \$opt_h);
         GetOptions ('d|debug+'                 => \$opt_d);
         GetOptions ('p|pretend+'               => \$opt_p);
         GetOptions ('v|verbose+'               => \$opt_v);
@@ -285,9 +236,6 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('ebuild+'                  => \$opt_ebuild);
         GetOptions ('testsandbox+'             => \$opt_testsandbox);
         GetOptions ('test+'                    => \$opt_test_code);
-        GetOptions ('check+'                   => \$opt_check_hosts);
-        GetOptions ('mount+'                   => \$opt_mount_hosts);
-        GetOptions ('unmount+'                 => \$opt_unmount_hosts);
         GetOptions ('move-backups+'            => \$opt_move_backups);
         GetOptions ('optimize-backups+'        => \$opt_optimize_backups);
     }
@@ -298,61 +246,6 @@ $Term::ANSIColor::AUTORESET = 1;
     } else {
 # Or update the mergetoolname with the override value from the /etc/cfg-update.conf...
         $merge_tool_name = basename($merge_tool);
-    }
-    $mount_count = @mount_point-1;
-# If --mount, --check, --unmount are being used we should include all remote hosts...
-    if (($opt_check_hosts > 0) || ($opt_mount_hosts > 0) || ($opt_unmount_hosts > 0)) {
-        $opt_h = "0-$mount_count";
-        $mount_first = 0;
-        $mount_last  = $mount_count;
-    } else {
-# If --mount, --check, --unmount are not being used, we should determine which hosts need to be excluded...
-        if ($opt_h =~ /^novalue$/) {
-            $mount_first = 0;
-            $mount_last  = 0;
-            $mount_count = 1;
-        } else {
-# Exclude remote hosts from the list if they do not fall within specified range [x] or [x-y]...
-            $_ = $opt_h; /^\d+/; $mount_first = $&;                     # take all digits until reaching non-digit "-"
-            if ($mount_first =~ /^$/) {                                 # reset first to 0 = localhost-only
-                $mount_first = 0;
-                print "Invalid number(s) found in -h option...\n";
-                print "Specify a number or range from 0-$mount_count!\n";
-                exit;
-            } else {
-                $_ = $opt_h; /^\d+-/; $mount_last = $';                 # take everything behind "digits-"
-                if ($mount_last !~ /^\d+$/) {                           # validate if last is a number
-                    if ($mount_last =~ /^$/) {                          # if only [x] has been specified, make last same as first
-                        $mount_last = $mount_first;
-                    } else {
-                        print "Invalid number(s) found in -h option!\n";
-                        print "Specify a number or range from 0-$mount_count!\n";
-                        exit;
-                    }
-                }
-            }
-            if ($mount_first > $mount_last) {                           # check order, reverse if neccesary
-                my $temp = $mount_first;
-                $mount_first = $mount_last;
-                $mount_last = $temp;
-            }
-            if ($mount_last > $mount_count) {                           # out of range check
-                print "Value out of range in -h option...\n";
-                print "Specify a number or range from 0-$mount_count!\n";
-                exit;
-            }
-            if ($mount_first == $mount_last) {                          # single value, not a range
-                print "Checking host $mount_first...\n";
-            } else {
-                print "Checking hosts $mount_first-$mount_last...\n";
-            }
-            for (my $i = $mount_first; $i <= $mount_last; $i++) {       # finally we check each specified host
-                if ($i == 0) { print "     Localhost  "; }
-                if ($i > 0) { print "     $mount_point[$i]  "; }
-                &remote_host_checks("$mount_point[$i]",$i);
-            }
-            if ($mount_first > 0 || $mount_last > 0) { &warn_sshfs_deprecated; }
-        }
     }
 # Enable stages depending on -a or -m flag...
     if (($opt_a >= 1) && ($opt_m >= 1)) {
@@ -422,11 +315,17 @@ $Term::ANSIColor::AUTORESET = 1;
 #                                   EXECUTE SELECTED RUNMODE SUBROUTINE                                              #
 ######################################################################################################################
 
+# Reject unrecognized options left in @ARGV when a runmode flag is also present (Getopt pass_through).
+    if (@ARGV > 0) {
+        my $runmode = ($opt_test_code > 0 || $opt_help > 0 || $opt_s > 0 || $opt_l > 0 || $opt_u > 0 ||
+                       $opt_b > 0 || $opt_r > 0 || $opt_disable_portage_hook > 0 || $opt_disable_paludis_hook > 0 ||
+                       $opt_move_backups > 0 || $opt_optimize_backups > 0);
+        if ($runmode) { &print_usage; exit; }
+    }
+
 # Go to runmode subroutine (optionally preceeded by checks) if a corresponding argument is found. Exit when done...
     if ($opt_test_code > 0)            { &test_code; exit; }
     if ($opt_help > 0)                 { &print_usage; exit; }
-    if ($opt_mount_hosts > 0)          { &root_only; &warn_sshfs_deprecated; &mount_hosts; exit;}
-    if ($opt_check_hosts > 0)          { &root_only; &warn_sshfs_deprecated; &check_hosts; exit;}
     if ($opt_s > 0)                    { &list_dirs; exit;}
     if ($opt_l > 0)                    { &list_updates; exit;}
     if ($opt_u > 0)                    { &root_only unless &sandbox_mode; &update_files; exit; }
@@ -436,7 +335,6 @@ $Term::ANSIColor::AUTORESET = 1;
     if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
     if ($opt_move_backups > 0)         { &root_only unless &sandbox_mode; &move_backups; exit; }
     if ($opt_optimize_backups > 0)     { &root_only unless &sandbox_mode; &optimize_backups; exit; }
-    if ($opt_unmount_hosts > 0)        { &root_only; &warn_sshfs_deprecated; &unmount_hosts; exit;}
 # If none of the above options are used, check for undocumented usage modes (2-way and 3-way diff mode)
     if ((@ARGV == 2) && (-f $ARGV[0]) && (-f $ARGV[1]))                  { &root_only; &diff_two_files; exit;   } # Simply parsing two files to diff/merge tool
     if ((@ARGV == 3) && (-f $ARGV[0]) && (-f $ARGV[1]) && (-f $ARGV[2])) { &root_only; &diff_three_files; exit; } # Simply parsing three files to diff/merge tool
@@ -477,15 +375,6 @@ sub strip{ #ARGS# ("linefromfile")
     $string =~ s/\s//g;    # strip all whitespace
     $string =~ s/#.*//;    # strip comment
 # Return a string without whitespace, quotes and comments
-    $string;
-}
-
-sub strip_comment{ #ARGS# ("linefromfile")
-    my $string = $_[0];
-    $string =~ s/^\s+//;   # strip leading whitespace
-    $string =~ s/#.*//;    # strip comment
-    $string =~ s/\s+$//;   # strip trailing whitespace
-# Return a string without leading or trailing whitespace and without comments
     $string;
 }
 
@@ -618,9 +507,6 @@ sub check_index{ #RUNMODE# -i, --index
     if (($opt_d >= 1) && ($log_pkg =~ $index_pkg)) { print "$tab"."  Checksum-index is up-to-date...\n"; }
 # If last installed package according to index does not match last installed package according to log, then update the index...
     if (($log_pkg !~ $index_pkg) || ($opt_f > 0)) {
-# Empty the list of remote hosts (each host is responsible for creating it's own checksum-index)...
-        splice(@mount_point);
-        $mount_point[0] = "";
         &find_updates;
         &build_index;
     } else {
@@ -765,120 +651,6 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</launch_tool>\n"; }
 }
 
-sub check_hosts{ #RUNMODE# --check
-    if ($opt_d >= 1) { print "$tab"."<check_hosts>\n"; $tab = $tab."    "; }
-    if (@mount_point > 1) {
-        for (my $i = 1; $i < @mount_point; ++$i) {
-            print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Checking $mount_point[$i]  ";
-            &remote_host_checks("$mount_point[$i]",$i);
-        }
-    } else {
-        print "$tab"."No mountpoints for remote systems found...\n";
-        print "$tab"."Check the MOUNT_POINT settings in $hosts_file\n";
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_hosts>\n"; }
-}
-
-sub remote_host_checks{ #ARGS# ("mount_point","i")
-    if ($opt_d >= 1) { print "$tab"."<remote_host_checks>\n"; $tab = $tab."    "; }
-# Unhide STDERR messages if -v option is used
-    if ($opt_v >= 1) { $debug = ""; }
-# Do some simple checks to see if the remote filesystem is available and correctly set up
-    my $remote_backup_path = "";
-    my $mount_point = $_[0];
-    $mount_point =~ s/\/$//;  # strip trailing slash from mountpoint
-    my $num = $_[1];
-    if ($num == 0) { $mount_point = "/"; }
-    if (!-d "$mount_point") {
-        print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  Mountpoint does not exist...\n";
-    } else {
-        if (`mount | grep $mount_point` =~ /^$/) {
-            print BOLD WHITE "$tab"."["; print BOLD RED "!!"; if ($opt_check_hosts > 0) { print BOLD WHITE "]  Not mounted...\n"; } else { print BOLD WHITE "]  Mounting failed...\n"; }
-        } else {
-            if ((!-d "$mount_point/etc") || (!-d "$mount_point/usr")) {
-                print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  No /etc and /usr found behind mountpoint...\n";
-            } else {
-                if (!-f "$mount_point/$index_file") {
-                    print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  $mount_point$index_file not found...\n";
-                } else {
-                    if (!-d "$mount_point/$backup_path") {
-                        print BOLD WHITE "$tab"."["; print BOLD RED "!!"; print BOLD WHITE "]  $mount_point$backup_path does not exist...\n";
-                    } else {
-                        print BOLD WHITE "$tab"."["; print BOLD GREEN "OK"; print BOLD WHITE "]\n";
-                    }
-                }
-            }
-        }
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</remote_host_checks>\n"; }
-}
-
-sub mount_hosts{ #RUNMODE# --mount
-    if ($opt_d >= 1) { print "$tab"."<mount_hosts>\n"; $tab = $tab."    "; }
-# Unhide STDERR messages if -v option is used
-    if ($opt_v >= 1) { $debug = ""; }
-# Check if number of MOUNT_POINTs and MOUNT_CMDs are equal, MOUNT_POINT is leading...
-    if (@mount_point != @mount_cmd) {
-        print "$tab"."Number of MOUNT_POINTs does not match number of MOUNT_CMDs...\n";
-        print "$tab"."Each host should have 3 variables in $hosts_file:\n";
-        print "$tab"."    MOUNTPOINT  (required, must contain path of mountpoint)\n";
-        print "$tab"."    MOUNT_CMD   (required, empty value is allowed)\n";
-        print "$tab"."    UNMOUNT_CMD (required, empty value is allowed)\n";
-    } else {
-        if (@mount_cmd > 1) {
-            for (my $i = 1; $i < @mount_cmd; ++$i) {
-                if (!$mount_cmd[$i]) { $mount_cmd[$i] = ""; }
-                if ($mount_cmd[$i] !~ /^$/) {         # skip if the mount_cmd is empty
-                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Mount $mount_point[$i]  ";
-                    system("$mount_cmd[$i] $debug");
-                    &remote_host_checks("$mount_point[$i]",$i);
-                } else {
-                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Skip  $mount_point[$i] (No MOUNT_CMD specified)\n";
-                }
-            }
-        } else {
-            print "$tab"."No mount commands found...\n";
-            print "$tab"."Check the MOUNT_CMD settings in $hosts_file\n";
-        }
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</mount_hosts>\n"; }
-}
-
-sub unmount_hosts{ #RUNMODE# --unmount
-    if ($opt_d >= 1) { print "$tab"."<unmount_hosts>\n"; $tab = $tab."    "; }
-# Unhide STDERR messages if -v option is used
-    if ($opt_v >= 1) { $debug = ""; }
-# Check if number of MOUNT_POINTs and UNMOUNT_CMDs are equal, MOUNT_POINT is leading...
-    if (@mount_point != @unmount_cmd) {
-        print "$tab"."Number of MOUNT_POINTs does not match number of UNMOUNT_CMDs...\n";
-        print "$tab"."Each host should have 3 variables in $hosts_file:\n";
-        print "$tab"."    MOUNTPOINT  (required, path of mountpoint)\n";
-        print "$tab"."    MOUNT_CMD   (required, but can be empty)\n";
-        print "$tab"."    UNMOUNT_CMD (required, but can be empty)\n";
-    } else {
-        if (@unmount_cmd > 1) {
-            for (my $i = 1; $i < @unmount_cmd; ++$i) {
-                if (!$unmount_cmd[$i]) { $unmount_cmd[$i] = ""; }
-                if ($unmount_cmd[$i] !~ /^$/) {         # skip if the unmount_cmd is empty
-                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "Unmount $mount_point[$i]  ";
-                    system("$unmount_cmd[$i] $debug");
-                    if (`mount | grep $mount_point[$i]` =~ /^$/) {
-                        print BOLD WHITE "["; print BOLD GREEN "OK"; print BOLD WHITE "]\n";
-                    } else {
-                        print BOLD WHITE "["; print BOLD RED "!!"; print BOLD WHITE "]"; print "(Try \"$progname -v --unmount\" to see STDERR messages)\n";
-                    }
-                } else {
-                    print "$tab"."$i "; if ($i < 1000) { print " "; } if ($i < 100) { print " "; } if ($i < 10)  { print " "; } print "No UNMOUNT_CMD specified...\n";
-                }
-            }
-        } else {
-            print "$tab"."No unmount commands found...\n";
-            print "$tab"."Check the UNMOUNT_CMD settings in $hosts_file\n";
-        }
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</unmount_hosts>\n"; }
-}
-
 sub list_dirs{ #RUNMODE# -s, --show-dirs
     if ($opt_d >= 1) { print "$tab"."<list_dirs>\n"; $tab = $tab."    "; }
     &find_protected_dirs;
@@ -970,12 +742,9 @@ sub find_updates{
     if ($opt_d >= 1) { print "$tab"."<find_updates>\n"; $tab = $tab."    "; }
     &find_protected_dirs;
     @list = ();
-    for (my $i = $mount_first; $i <= $mount_last; $i++) {
-        if ($mount_point[$i]) { $host_path = $mount_point[$i]; } else { $host_path = ""; }
-        for (my $i = 0; $i < @dir; $i++) {
-            if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] -name '$config_new' $debug | sort $debug\n"; }
-            push(@list, `find "$host_path$dir[$i]" -name '$config_new' $debug | sort $debug`);
-        }
+    for (my $i = 0; $i < @dir; $i++) {
+        if ($opt_d >= 1) { print "$tab"."  find $dir[$i] -name '$config_new' $debug | sort $debug\n"; }
+        push(@list, `find "$dir[$i]" -name '$config_new' $debug | sort $debug`);
     }
     chomp @list;
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_updates>\n"; }
@@ -983,39 +752,28 @@ sub find_updates{
 
 sub prepare_filenames_for_updating{ #ARGS# ("file")
     if ($opt_d >= 1) { print "$tab"."<prepare_filenames_for_updating>\n"; $tab = $tab."    "; }
-    $_ = dirname($_[0]);
-    if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
-        $host_path = $`;                           # put string in front of // into host_path
-        $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
-        $path = $';                                # put string behind // into path
-        $path = "/".$path."/";                     # re-add / in front and add / to end of path
-        $file = basename($_[0]);
-    } else {                                       # if // is not found make host_path empty
-        $host_path = "";
-        $path = dirname($_[0]);
-        $path = $path."/";                         # re-add / to end of path
-        $file = basename($_[0]);
-    }
+    $path = dirname($_[0]);
+    $path = $path."/";
+    $file = basename($_[0]);
     $file =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
-    $file1 = $host_path.$path.$file;               # contains /host_path//path/filename
-    $file2 = $_[0];                                # contains /host_path//path/._cfg0000_filename
+    $file1 = $path.$file;
+    $file2 = $_[0];
     $file3 = $backup_old;
     $file3 =~ s/\*/$file/;
-    $file3 = $host_path.$backup_path.$path.$file3; # contains /host_path//backup_path/path/._old-cfg_filename (previous config files)
+    $file3 = $backup_path.$path.$file3;
     $file4 = $backup_new;
     $file4 =~ s/\*/$file/;
-    $file4 = $host_path.$backup_path.$path.$file4; # contains /host_path//backup_path/path/._new-cfg_filename (previous ._cfg0000_ files)
+    $file4 = $backup_path.$path.$file4;
     $file5 = $merged;
     $file5 =~ s/\*/$file/;
-    $file5 = $host_path.$path.$file5;              # contains /host_path//path/filename.merge
+    $file5 = $path.$file5;
     $file6 = $temp_old;
     $file6 =~ s/\*/$file/;
-    $file6 = $host_path.$backup_path.$path.$file6; # contains /host_path//backup_path/path/._temp_old-cfg_filename
+    $file6 = $backup_path.$path.$file6;
     $file7 = $temp_new;
     $file7 =~ s/\*/$file/;
-    $file7 = $host_path.$backup_path.$path.$file7; # contains /host_path//backup_path/path/._temp_new-cfg_filename
+    $file7 = $backup_path.$path.$file7;
     if ($opt_d >= 1) {
-        print "$tab"."  host_path   = $host_path\n";
         print "$tab"."  backup_path = $backup_path\n";
         print "$tab"."  path        = $path\n";
         print "$tab"."  file1       = $file1\n";
@@ -1034,18 +792,11 @@ sub determine_state{ #DEPS# (requires that global variable $file1 contains a fil
     if (-f $index_file) {
         if ($opt_d >= 1) { if (-f $file1) { print "$tab"."  md5sum $file1 $debug | cut -d\" \" -f1 $debug\n"; }}
         local $ENV{LC_ALL}="C";
-        if ($file1 =~ /\/\//) {           # search for // in filename, everything in front of this // is the path of the remote host
-            $host_path = $`;              # take the part of the string in front of the above match
-            $file1_without_host = "/".$'; # take the part of the string behind the above match
-        } else {
-            $host_path = "";              # if // is not found in the filename it's on the localhost
-            $file1_without_host = $file1; # if // is not found the filename stays the same
-        }
         if (-f $file1) { chomp ($md5sum_file = `md5sum "$file1" $debug | cut -d" " -f1 $debug`); }
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum of current config file : $md5sum_file\n"; }
-        if ($opt_d >= 1) { print "$tab"."  grep \"$file1_without_host \" $host_path$index_file $debug | cut -d\" \" -f2 $debug\n"; }
+        if ($opt_d >= 1) { print "$tab"."  grep \"$file1 \" $index_file $debug | cut -d\" \" -f2 $debug\n"; }
         local $ENV{LC_ALL}="C";
-        chomp ($md5sum_index = `grep "$file1_without_host " "$host_path$index_file" $debug | cut -d" " -f2 $debug`);
+        chomp ($md5sum_index = `grep "$file1 " "$index_file" $debug | cut -d" " -f2 $debug`);
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum in the checksum-index  : $md5sum_index\n"; }
         if ($md5sum_index =~ /.+/) {
             if (length($md5sum_file) && $md5sum_index !~ $md5sum_file) {
@@ -1848,12 +1599,9 @@ sub find_backups{
     if ($opt_d >= 1) { print "$tab"."<find_backups>\n"; $tab = $tab."    "; }
     &find_protected_dirs;
     @list = ();
-    for (my $i = $mount_first; $i <= $mount_last; $i++) {
-        if ($mount_point[$i]) { $host_path = $mount_point[$i]; } else { $host_path = ""; }
-        for (my $i = 0; $i < @dir; ++$i) {
-            if ($opt_d >= 1) { print "$tab"."  find $host_path$backup_path$dir[$i] -name '$backup_old' $debug\n"; }
-            push(@list, `find $host_path$backup_path$dir[$i] -name '$backup_old' $debug`);
-        }
+    for (my $i = 0; $i < @dir; ++$i) {
+        if ($opt_d >= 1) { print "$tab"."  find $backup_path$dir[$i] -name '$backup_old' $debug\n"; }
+        push(@list, `find $backup_path$dir[$i] -name '$backup_old' $debug`);
     }
     chomp @list;
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</find_backups>\n"; }
@@ -1861,42 +1609,30 @@ sub find_backups{
 
 sub prepare_filenames_for_restoring{ #ARGS# ("file")
     if ($opt_d >= 1) { print "$tab"."<prepare_filenames_for_restoring>\n"; $tab = $tab."    "; }
-    $_ = dirname($_[0]);
-    if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
-        $host_path = $`;                           # put string in front of // into host_path
-        $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
-        $path = $';                                # put string behind // into path
-        $path = "/".$path."/";                     # re-add / in front and add / to end of path
-        $path =~ s/$backup_path//;                 # strip the backup_path from the path
-        $file = basename($_[0]);
-    } else {                                       # if // is not found make host_path empty
-        $host_path = "";
-        $path = dirname($_[0]);
-        $path =~ s/$backup_path//;                 # strip the backup_path from the path
-        $path = $path."/";                         # re-add / to end of path
-        $file = basename($_[0]);
-    }
+    $path = dirname($_[0]);
+    $path =~ s/$backup_path//;
+    $path = $path."/";
+    $file = basename($_[0]);
     $file =~ s/$rm_old//;                          # strips ._old-cfg_ from filename
     $file1 = $restore_old;
     $file1 =~ s/\*/$file/;
-    $file1 = $host_path.$path.$file1;              # contains /host_path//path/filename
+    $file1 = $path.$file1;
     $file2 = $restore_new;
     $file2 =~ s/\*/$file/;
-    $file2 = $host_path.$path.$file2;              # contains /host_path/path/._cfg0000_filename
-    if (-e $file2) { $file2 =~ s/0000/----/; }     # or       /host_path/path/._cfg----_filename if a newer update is found
+    $file2 = $path.$file2;
+    if (-e $file2) { $file2 =~ s/0000/----/; }
     $file3 = $backup_old;
     $file3 =~ s/\*/$file/;
-    $file3 = $host_path.$backup_path.$path.$file3; # contains /host_path//backup_path/path/._old-cfg_filename
+    $file3 = $backup_path.$path.$file3;
     $file4 = $backup_new;
     $file4 =~ s/\*/$file/;
-    $file4 = $host_path.$backup_path.$path.$file4; # contains /host_path//backup_path/path/._new-cfg_filename
+    $file4 = $backup_path.$path.$file4;
     $file5 = $merged;
     $file5 =~ s/\*/$file/;
-    $file5 = $host_path.$path.$file5;              # contains /host_path//path/filename.merge
+    $file5 = $path.$file5;
     $file6 = "undefined-filename";
     $file7 = "undefined-filename";
     if ($opt_d >= 1) {
-        print "$tab"."  host_path   = $host_path\n";
         print "$tab"."  backup_path = $backup_path\n";
         print "$tab"."  path        = $path\n";
         print "$tab"."  file1       = $file1\n";
@@ -2030,12 +1766,9 @@ sub move_backups{ #RUNMODE# --move-backups
     } else {
         &find_protected_dirs;
         @list = ();
-        for (my $i = 0; $i < @mount_point; ++$i) {
-            $host_path = $mount_point[$i];
-            for (my $i = 0; $i < @dir; ++$i) {
-                if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*'me ' $debug | sort $debug\n"; }
-                push(@list, `find $host_path$dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug`);
-            }
+        for (my $i = 0; $i < @dir; ++$i) {
+            if ($opt_d >= 1) { print "$tab"."  find $dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug\n"; }
+            push(@list, `find $dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug`);
         }
         chomp @list;
         if (@list == 0) {
@@ -2049,21 +1782,11 @@ sub move_backups{ #RUNMODE# --move-backups
             $totalcount = @list;
             for (my $i = 0; $i < @list; $i++) {
                 $num = $i + 1;
-                $_ = dirname($list[$i]);
-                if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
-                    $host_path = $`;                           # put string in front of // into host_path
-                    $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
-                    $path = $';                                # put string behind // into path
-                    $path = "/".$path."/";                     # re-add / in front and add / to end of path
-                    $file = basename($list[$i]);
-                } else {                                       # if // is not found make host_path empty
-                    $host_path = "";
-                    $path = dirname($list[$i]);
-                    $path = $path."/";                         # re-add / to end of path
-                    $file = basename($list[$i]);
-                }
-                $file1 = $host_path.$path.$file;               # contains /host_path/path/._new-cfg_filename
-                $file2 = $host_path.$backup_path.$path.$file;  # contains /host_path//backup_path/path/._new-cfg_filename
+                $path = dirname($list[$i]);
+                $path = $path."/";
+                $file = basename($list[$i]);
+                $file1 = $path.$file;
+                $file2 = $backup_path.$path.$file;
                 $path = dirname($file2);
                 my $percentage = int($num/$totalcount*100);
                 if (!-e "$path") {
@@ -2085,33 +1808,20 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
 # Create fake backups of the previous ._cfg0000_ file to maximize chances for automatic updating
     &find_protected_dirs;
     @list = ();
-    for (my $i = 0; $i < @mount_point; ++$i) {
-        $host_path = $mount_point[$i];
-        for (my $i = 0; $i < @dir; ++$i) {
-            if ($opt_d >= 1) { print "$tab"."  find $host_path$dir[$i] $debug\n"; }
-            push(@list, `find $host_path$dir[$i] $debug`);
-        }
+    for (my $i = 0; $i < @dir; ++$i) {
+        if ($opt_d >= 1) { print "$tab"."  find $dir[$i] $debug\n"; }
+        push(@list, `find $dir[$i] $debug`);
     }
     chomp @list;
     if (@list == 0) { print "$tab"."No protected files found... you should check CONFIG_PROTECT!\n\n"; }
     $totalcount = @list;
     for (my $i = 0; $i < @list; $i++) {
         $num = $i + 1;
-        $_ = dirname($list[$i]);
-        if ($_ =~ /\/\//) {                            # split dirname value into host_path and normal path when // is found
-            $host_path = $`;                           # put string in front of // into host_path
-            $host_path = $host_path."/";               # re-add / so the host string is easily recognisable later on by //
-            $path = $';                                # put string behind // into path
-            $path = "/".$path."/";                     # re-add / in front and add / to end of path
-            $file = basename($list[$i]);
-        } else {                                       # if // is not found make host_path empty
-            $host_path = "";
-            $path = dirname($list[$i]);
-            $path = $path."/";                         # re-add / to end of path
-            $file = basename($list[$i]);
-        }
-        $file1 = $host_path.$path.$file;                            # contains /host_path/path/filename
-        $file2 = $host_path.$backup_path.$path."._new-cfg_".$file;  # contains /host_path//backup_path/path/filename
+        $path = dirname($list[$i]);
+        $path = $path."/";
+        $file = basename($list[$i]);
+        $file1 = $path.$file;
+        $file2 = $backup_path.$path."._new-cfg_".$file;
         $file4 = "";
         $file5 = "";
         &determine_state;
@@ -2274,15 +1984,6 @@ sub tool_intro{ #ARGS# ("mergetoolname")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</tool_intro>\n"; }
 }
 
-sub warn_sshfs_deprecated {
-    return if $sshfs_deprecation_warned;
-    $sshfs_deprecation_warned = 1;
-    print "\n";
-    print BOLD YELLOW "$tab"."WARNING: sshfs multi-host support is deprecated and will be removed in a future release.\n";
-    print BOLD YELLOW "$tab"."Run cfg-update on each host directly instead. See $hosts_file and the project README.\n";
-    print "\n";
-}
-
 sub show_warning{
     if ($opt_d >= 1) { print "$tab"."<show_warning>\n"; $tab = $tab."    "; }
 # 80 chars            ________________________________________________________________________________
@@ -2344,38 +2045,24 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."RUNMODES\n";
         print "$tab"."  -l, --list\n";
         print "$tab"."          List updates (._cfg0000_* files) including modification state\n";
-        print "$tab"."          Examples: $progname -l         : list updates on localhost\n";
-        print "$tab"."                    $progname -l -h1 -l  : list updates on remote host 1\n";
-        print "$tab"."                    $progname -l -h0-100 : list localhost + remote host 1-100\n";
+        print "$tab"."          Examples: $progname -l         : list pending updates\n";
+        print "$tab"."                    $progname -lv        : list with verbose stage info\n";
         print "$tab"."\n";
         print "$tab"."  -u, --update\n";
         print "$tab"."          Update the protected configuration files\n";
-        print "$tab"."          Examples: $progname -u         : update localhost\n";
+        print "$tab"."          Examples: $progname -u         : update interactively\n";
         print "$tab"."                    $progname -up        : update pretend-only\n";
         print "$tab"."                    $progname -ua        : update automatic-only\n";
         print "$tab"."                    $progname -um        : update manual-only\n";
-        print "$tab"."                    $progname -u -h1     : update remote host 1\n";
-        print "$tab"."                    $progname -u -h0-100 : update localhost + remote host 1-100\n";
         print "$tab"."\n";
         print "$tab"."  -b, --backups\n";
         print "$tab"."          List backup files, with numbers for use with the -r option\n";
         print "$tab"."          The backups are stored in $backup_path\n";
-        print "$tab"."          Examples: $progname -b         : list all backups localhost\n";
-        print "$tab"."                    $progname -b -h1     : list all backups remote host 1\n";
+        print "$tab"."          Examples: $progname -b         : list all backups\n";
         print "$tab"."\n";
         print "$tab"."  -r [x], --restore [x]\n";
         print "$tab"."          Restore a backup by using a number [x] from the -b output\n";
-        print "$tab"."          Examples: $progname -r10       : restore backup 10 on localhost\n";
-        print "$tab"."                    $progname -r10 -h1   : restore backup 10 on remote host 1\n";
-        print "$tab"."\n";
-        print "$tab"."  --mount\n";
-        print "$tab"."          [DEPRECATED] Mounts remote hosts specified in $hosts_file\n";
-        print "$tab"."\n";
-        print "$tab"."  --check\n";
-        print "$tab"."          [DEPRECATED] Checks remote hosts for problems and shows their status\n";
-        print "$tab"."\n";
-        print "$tab"."  --unmount\n";
-        print "$tab"."          [DEPRECATED] Unmounts remote hosts specified in $hosts_file\n";
+        print "$tab"."          Examples: $progname -r10       : restore backup 10\n";
         print "$tab"."\n";
         print "$tab"."OPTIONS\n";
         print "$tab"."  -a, --automatic-only\n";
@@ -2383,11 +2070,6 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."\n";
         print "$tab"."  -m, --manual-only\n";
         print "$tab"."          Skips all automatic updates\n";
-        print "$tab"."\n";
-        print "$tab"."  -h [x|x-y], --host [x|x-y]\n";
-        print "$tab"."          [DEPRECATED] Includes sshfs-mounted remote hosts (combine with -u, -l, -b, -r)\n";
-        print "$tab"."          Multi-host updates from one machine are deprecated; use cfg-update per host.\n";
-        print "$tab"."          For legacy configuration see: $hosts_file\n";
         print "$tab"."\n";
         print "$tab"."  -t [tool], --tool [tool]\n";
         print "$tab"."          Set mergetool, overrides the default setting in $settings\n";
@@ -2480,7 +2162,6 @@ sub show_debug_info {
         print "$tab"."merge_tool        = $merge_tool\n";
         print "$tab"."xxdiff_style      = $xxdiff_style\n";
         print "$tab"."index_file        = $index_file\n";
-        print "$tab"."hosts_file        = $hosts_file\n";
         print "$tab"."portage_hook      = $portage_hook\n";
         print "$tab"."paludis_hook      = $paludis_hook\n";
         print "$tab"."pkg_manager       = $pkg_manager\n";
@@ -2516,24 +2197,14 @@ sub show_debug_info {
         print "$tab"."opt_d = $opt_d\n";
         print "$tab"."opt_p = $opt_p\n";
         print "$tab"."opt_v = $opt_v\n";
-        print "$tab"."opt_h = $opt_h\n";
         print "$tab"."opt_t = $opt_t\n";
         print "$tab"."opt_help                 = $opt_help\n";
         print "$tab"."opt_test_code            = $opt_test_code\n";
         print "$tab"."opt_ebuild               = $opt_ebuild\n";
         print "$tab"."opt_testsandbox          = $opt_testsandbox\n";
-        print "$tab"."opt_check_hosts          = $opt_check_hosts\n";
-        print "$tab"."opt_mount_hosts          = $opt_mount_hosts\n";
-        print "$tab"."opt_unmount_hosts        = $opt_unmount_hosts\n";
         print "$tab"."opt_move_backups         = $opt_move_backups\n";
         print "$tab"."opt_disable_portage_hook = $opt_disable_portage_hook\n";
         print "$tab"."opt_disable_paludis_hook = $opt_disable_paludis_hook\n";
         print "$tab"."opt_optimize_backups     = $opt_optimize_backups\n";
-        print "$tab"."mount_count              = $mount_count\n";
-        print "$tab"."mount_first              = $mount_first\n";
-        print "$tab"."mount_last               = $mount_last\n";
-        for (my $x = 0; $x < @mount_point; $x++) {
-            print "$tab"."mount_point[$x]           = \"$mount_point[$x]\"\n";
-        }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</show_debug_info>\n"; }
 }
