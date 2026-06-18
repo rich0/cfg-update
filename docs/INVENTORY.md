@@ -90,14 +90,14 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `--disable-portage-hook` | `disable_portage_hook` | Yes | Medium (uninstall) |
 | `--disable-paludis-hook` | `disable_paludis_hook` | Yes | Low |
 | `--ebuild` | Suppresses hooks/tool check | — | Internal (ebuild install) |
-| `--test` | `test_code` (empty stub) | No | Remove or repurpose |
+| `--testsandbox` | Bypass `root_only` with `--ebuild` | — | Internal (test harness) |
 | `--help` | `print_usage` | No | **High** |
 | `file1 file2` | `diff_two_files` | Yes | Low |
 | `file1 file2 file3` | `diff_three_files` | Yes | Low |
 
 ---
 
-## Subroutine inventory (54 total)
+## Subroutine inventory (53 total)
 
 ### Core update pipeline (keep)
 
@@ -158,7 +158,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | Subroutine / artifact | Evidence | Recommendation |
 |-----------------------|----------|----------------|
 | ~~`breakpoint`~~ | Zero call sites | **Removed** (stage 3) |
-| `test_code` (L435) | Stub prints "Nothing to test..."; only called by `--test` | **Repurpose** for smoke tests in stage 6, or remove flag |
+| ~~`test_code` / `--test`~~ | Empty stub; superseded by `test/run-tests.sh` | **Removed** (issue #27) |
 | ~~emerge wrappers / phphelper~~ | Superseded by Portage bashrc hook | **Removed** (stage 3) |
 | Stale hook/merge messages in `cfg-update` | xxdiff defaults, "alias" wording | **Fixed** (stage 3) |
 
@@ -326,9 +326,8 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | ~~sshfs multi-host (`-h`, `--mount`)~~ | — | Removed (1.10.0); HOWTO at git tag 1.9.0 |
 | ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
 | ~~PHP helper~~ | — | Removed (stage 3) |
-| `--test` stub | **Repurpose** | Hook for automated smoke tests (stage 6) |
+| ~~`--test` stub / `test_code`~~ | — | Removed (issue #27); use `test/run-tests.sh` |
 | ~~`breakpoint` subroutine~~ | — | Removed (stage 3) |
-| `test_code` empty stub | **Repurpose/remove** | No value today |
 
 ---
 

@@ -207,7 +207,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $opt_ebuild = 0;
     my $opt_testsandbox = 0;
     my $opt_paludis = 0;
-    my $opt_test_code = 0;
     my $opt_move_backups = 0;
 #    my $opt_enable_portage_hook = 0;
 #    my $opt_enable_paludis_hook = 0;
@@ -235,7 +234,6 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('paludis+'                 => \$opt_paludis);
         GetOptions ('ebuild+'                  => \$opt_ebuild);
         GetOptions ('testsandbox+'             => \$opt_testsandbox);
-        GetOptions ('test+'                    => \$opt_test_code);
         GetOptions ('move-backups+'            => \$opt_move_backups);
         GetOptions ('optimize-backups+'        => \$opt_optimize_backups);
     }
@@ -317,14 +315,13 @@ $Term::ANSIColor::AUTORESET = 1;
 
 # Reject unrecognized options left in @ARGV when a runmode flag is also present (Getopt pass_through).
     if (@ARGV > 0) {
-        my $runmode = ($opt_test_code > 0 || $opt_help > 0 || $opt_s > 0 || $opt_l > 0 || $opt_u > 0 ||
+        my $runmode = ($opt_help > 0 || $opt_s > 0 || $opt_l > 0 || $opt_u > 0 ||
                        $opt_b > 0 || $opt_r > 0 || $opt_disable_portage_hook > 0 || $opt_disable_paludis_hook > 0 ||
                        $opt_move_backups > 0 || $opt_optimize_backups > 0);
         if ($runmode) { &print_usage; exit; }
     }
 
 # Go to runmode subroutine (optionally preceeded by checks) if a corresponding argument is found. Exit when done...
-    if ($opt_test_code > 0)            { &test_code; exit; }
     if ($opt_help > 0)                 { &print_usage; exit; }
     if ($opt_s > 0)                    { &list_dirs; exit;}
     if ($opt_l > 0)                    { &list_updates; exit;}
@@ -348,11 +345,6 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 #                                     ALL SUBROUTINES BELOW THIS LINE                                                #
 ######################################################################################################################
-
-sub test_code{ #RUNMODE# --test
-# Add your test code here and run "cfg-update --test" to execute it...
-    print "Nothing to test...\n";
-}
 
 sub state_is { #ARGS# ($state, @codes)
     my ($s, @codes) = @_;
@@ -2199,7 +2191,6 @@ sub show_debug_info {
         print "$tab"."opt_v = $opt_v\n";
         print "$tab"."opt_t = $opt_t\n";
         print "$tab"."opt_help                 = $opt_help\n";
-        print "$tab"."opt_test_code            = $opt_test_code\n";
         print "$tab"."opt_ebuild               = $opt_ebuild\n";
         print "$tab"."opt_testsandbox          = $opt_testsandbox\n";
         print "$tab"."opt_move_backups         = $opt_move_backups\n";
