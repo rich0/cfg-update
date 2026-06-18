@@ -2,13 +2,11 @@
 # Copyright 2002-2005 Gentoo Technologies, Inc.; Distributed under the GPL v2
 # $Header: $
 
-*cfg-update-1.10.1 (development)
+*cfg-update-1.10.1 (18 JUN 2026)
 
   Prune niche/debug features: -s/--show-protected-dirs, ad-hoc diff modes,
   --move-backups, dead commented code, and unused log_file/merge_history
-  (issue #28). Do not tag until approved.
-
-*cfg-update-1.10.0 (development)
+  (issue #28). 
 
   Remove undocumented --test runmode and test_code stub; use test/run-tests.sh
   instead (issue #27).
