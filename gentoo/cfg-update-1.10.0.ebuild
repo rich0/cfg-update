@@ -1,11 +1,5 @@
-# Copyright 1999-2025 Gentoo Authors
+# Copyright 1999-2026 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
-#
-# Fork development ebuild. Based on ::gentoo app-portage/cfg-update/cfg-update-1.8.9-r3.ebuild.
-# Gentoo's uninit-value patch (bugs.gentoo.org/829993) is merged in cfg-update.
-# PV 1.9.0 is tagged; 1.10.0 removes deprecated sshfs multi-host support — do not tag without approval.
-# Stage 5: Paludis maskdir fix, hardened install_all_pre hook script.
-# Stage 6c: FEATURES=test integration harness via test/run-tests.sh.
 
 EAPI=8
 
