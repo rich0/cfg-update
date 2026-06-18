@@ -9,14 +9,21 @@ unused legacy features.  A few obvious bugs were fixed, as well as dilfridge's p
 
 A safe, staged alternative to Gentoo's `etc-update` for handling configuration file updates after package merges.
 
-**Upstream:** Stephan van Boven (Gentoo, 2007)  
 **Maintained fork:** [rich0/cfg-update](https://github.com/rich0/cfg-update)  
-**Version:** 1.10.0 (development)
-**License:** GPL v2 ([COPYING](COPYING))
+**Version:** 1.10.1  
+**License:** GPL-2 ([COPYING](COPYING))
 
-## What it does
+## Description
 
-When Portage installs a package that updates a protected config file, it leaves a `._cfg0000_*` file beside the live config. `cfg-update` finds those pending updates and processes them through a **5-stage pipeline**:
+When Portage installs a package that updates a protected config file, it leaves a `._cfg0000_*` marker beside the live config. `cfg-update` finds those pending updates and routes each file through a staged pipeline — automatic overwrites and merges first, then interactive resolution for anything that still needs attention.
+
+## Key features
+
+- Automatic updates for configs whose checksum still matches the install-time index
+- Automatic 3-way merge when a backup from a prior update exists
+- GUI or CLI merge tool support (`MERGE_TOOL` in `/etc/cfg-update.conf`)
+- Enable or disable each stage individually; `-a` runs automatic stages only (handy for cron)
+- `-p` pretend mode to preview actions without changing files
 
 | Stage | Mode | Behavior |
 |-------|------|----------|
@@ -26,112 +33,43 @@ When Portage installs a package that updates a protected config file, it leaves 
 | 4 | Manual | 2-way merge for files never updated by cfg-update before |
 | 5 | Manual | Binaries, symlinks, and other special cases |
 
-Stages can be disabled individually in `/etc/cfg-update.conf`. Use `-a` (automatic-only) for cron jobs that should skip manual stages.
-
-## Quick start
-
-```bash
-# List pending config updates
-cfg-update -l
-
-# Interactive update session (requires root)
-sudo cfg-update -u
-
-# Preview what would happen without making changes
-sudo cfg-update -p -u
-
-# Automatic stages only (suitable for cron)
-sudo cfg-update -au
-```
-
-After `emerge`, if new `._cfg0000_*` files appear, run `cfg-update -u` before the next emerge when possible — the checksum index cannot refresh while pending updates exist.
-
 ## Installation
 
-This repository contains the script sources. On Gentoo, install via an ebuild/overlay or manually:
-
 ```bash
-# Example manual install (adjust paths to taste)
-sudo install -m 755 cfg-update /usr/bin/cfg-update
-sudo install -m 644 cfg-update.conf /etc/cfg-update.conf
-sudo install -m 644 cfg-update.8 /usr/share/man/man8/cfg-update.8
-sudo install -m 755 cfg-update_indexing /usr/lib/cfg-update/cfg-update_indexing
-sudo mandb
+emerge app-portage/cfg-update
 ```
 
-On first run, `cfg-update` automatically installs a Portage hook in `/etc/portage/bashrc` that rebuilds the checksum index before each emerge:
+On first run, `cfg-update` installs a Portage hook in `/etc/portage/bashrc` that rebuilds the checksum index before each emerge. Set your preferred merge tool in `/etc/cfg-update.conf` (default: `meld`). See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for optional packages.
 
-```bash
-pre_pkg_setup() {
-    [[ $ROOT = / ]] && cfg-update --index
-}
-```
+This repository tracks the maintained fork; Gentoo's tree may package an older release.
 
-Set your preferred merge tool in `/etc/cfg-update.conf` (default: `meld`):
-
-```
-MERGE_TOOL = /usr/bin/meld
-```
-
-See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for required packages.
-
-## Configuration
-
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
 | `/etc/cfg-update.conf` | Merge tool, stage toggles, backup/index paths |
 | `/var/lib/cfg-update/checksum.index` | MD5 index of protected files |
 | `/var/lib/cfg-update/backups/` | Per-update backups for 3-way merging |
 
-Template copy of the config file is in this repository: [`cfg-update.conf`](cfg-update.conf).
+A template config file is in this repository: [`cfg-update.conf`](cfg-update.conf).
 
-## Common commands
-
-```bash
-cfg-update -l              # list pending updates
-cfg-update -u              # update (interactive)
-cfg-update -au             # automatic stages only
-cfg-update -b              # list backups
-cfg-update -r <n>          # restore backup #n from -b output
-cfg-update -i              # rebuild checksum index
-cfg-update --optimize-backups   # prune redundant backup files
-cfg-update --help          # full option list
-man cfg-update             # detailed manual
-```
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Internal design, data flow, hooks |
-| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | System and Perl dependencies |
-| [docs/INVENTORY.md](docs/INVENTORY.md) | Full codebase characterization (stage 1) |
-| [cfg-update.8](cfg-update.8) | Man page |
-
-## Development
-
-This fork is being revived on isolated `refactor/stage-*` branches. See [docs/INVENTORY.md](docs/INVENTORY.md) for the cleanup roadmap.
-
-The vendored ebuild in [`gentoo/`](gentoo/) tracks the development line (**1.10.0**). Release **1.9.0** is tagged; do not tag new versions without maintainer approval.
+## Basic use
 
 ```bash
-# Validate Perl syntax
-perl -c cfg-update
-
-# Integration tests (full suite, no root required)
-./test/run-tests.sh
-./test/run-tests.sh --full   # fail if any tier skipped (ebuild/CI)
-
-# See test/README.md for fixture layout and scenario docs
+cfg-update -l          # list pending config updates
+sudo cfg-update -u     # interactive update session
+sudo cfg-update -p -u  # preview without making changes
+sudo cfg-update -au    # automatic stages only (suitable for cron)
 ```
 
-## Reporting issues
+After `emerge`, if new `._cfg0000_*` files appear, run `cfg-update -u` before the next emerge when possible — the checksum index cannot refresh while pending updates exist.
 
-Report bugs on the [GitHub issue tracker](https://github.com/rich0/cfg-update/issues).
+For the full option list, run `cfg-update --help` or `man cfg-update`.
 
-Historical bugs were filed at [bugs.gentoo.org](https://bugs.gentoo.org) when this lived in the Gentoo tree.
+## Contact and contributing
 
-## See also
+Report bugs and request features on the [GitHub issue tracker](https://github.com/rich0/cfg-update/issues). Pull requests are welcome.
 
-- `etc-update` — Portage's built-in config updater
-- `dispatch-conf` — Another Gentoo config merge tool
+## Acknowledgements
+
+- **Original author:** Stephan van Boven (Gentoo, 2007)
+- **Fork maintenance:** [rich0](https://github.com/rich0)
+- **Community:** Gentoo proxy maintainers and contributors
