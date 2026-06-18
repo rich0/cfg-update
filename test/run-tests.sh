@@ -456,6 +456,11 @@ tier0_static() {
     else
         fail "perl -c cfg-update"
     fi
+    if perl "$CFG_UPDATE" --test 2>&1 | grep -q "Nothing to test"; then
+        fail "--test stub still present"
+    else
+        pass "--test stub removed"
+    fi
     if bash -n "$REPO_ROOT/test/run-tests.sh"; then
         pass "bash -n run-tests.sh"
     else

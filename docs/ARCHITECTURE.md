@@ -4,7 +4,7 @@ This document describes how `cfg-update` works internally. For a file-by-file in
 
 ## Overview
 
-`cfg-update` is a single Perl script (~2,500 lines, 54 subroutines) that:
+`cfg-update` is a single Perl script (~2,500 lines, 53 subroutines) that:
 
 1. Maintains a **checksum index** of files in `CONFIG_PROTECT` directories
 2. Scans for Portage config update markers (`._cfg????_*`)
@@ -234,4 +234,4 @@ These enable stage 2's 3-way merges on subsequent updates.
 
 ## Testing
 
-`test.tgz` contains synthetic `._cfg*` scenarios (unmodified files, 3-way merge success/conflict, binaries, symlinks). The `prepare_cfg-update_test` script seeds a checksum index and runs `cfg-update --list`. These fixtures will be extracted into the repo and wired into CI in a later stage.
+Integration tests live under [`test/`](../test/). Per-scenario fixtures are in [`test/fixtures/`](../test/fixtures/); the harness is [`test/run-tests.sh`](../test/run-tests.sh) (see [`test/README.md`](../test/README.md)). Run `./test/run-tests.sh` from the repo root (no root required); use `--full` for ebuild/CI parity. The ebuild `src_test()` invokes the same harness when `USE=test`.

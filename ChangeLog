@@ -2,6 +2,11 @@
 # Copyright 2002-2005 Gentoo Technologies, Inc.; Distributed under the GPL v2
 # $Header: $
 
+*cfg-update-1.10.0 (development)
+
+  Remove undocumented --test runmode and test_code stub; use test/run-tests.sh
+  instead (issue #27).
+
 *cfg-update-1.8.2-r1 (18 MAY 2007)
 
   18 MAY 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update
