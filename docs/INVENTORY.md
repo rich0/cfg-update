@@ -76,7 +76,6 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `-i`, `--index` | `check_index` | Yes | **High** |
 | `-b`, `--backups` | `list_backups` | No | Medium |
 | `-r`, `--restore` | `restore_backups` | Yes | Medium |
-| `-s`, `--show-protected-dirs` | `list_dirs` | No | Low (debug) |
 | `-a`, `--automatic-only` | (modifier for `-u`) | Yes | Medium (cron) |
 | `-m`, `--manual-only` | (modifier for `-u`) | Yes | Low |
 | `-p`, `--pretend` | (modifier) | Varies | Medium |
@@ -85,19 +84,16 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `-d`, `--debug` | `show_debug_info` | No | Low |
 | `-t`, `--tool` | Override merge tool | Varies | Medium |
 | `--paludis` | Sets Paludis mode for `--index` | Yes | Low |
-| `--move-backups` | `move_backups` | Yes | Low (migration) |
 | `--optimize-backups` | `optimize_backups` | Yes | Medium |
 | `--disable-portage-hook` | `disable_portage_hook` | Yes | Medium (uninstall) |
 | `--disable-paludis-hook` | `disable_paludis_hook` | Yes | Low |
 | `--ebuild` | Suppresses hooks/tool check | — | Internal (ebuild install) |
 | `--testsandbox` | Bypass `root_only` with `--ebuild` | — | Internal (test harness) |
 | `--help` | `print_usage` | No | **High** |
-| `file1 file2` | `diff_two_files` | Yes | Low |
-| `file1 file2 file3` | `diff_three_files` | Yes | Low |
 
 ---
 
-## Subroutine inventory (53 total)
+## Subroutine inventory
 
 ### Core update pipeline (keep)
 
@@ -130,7 +126,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | Subroutine | Lines | Purpose |
 |------------|------:|---------|
 | `find_backups`, `list_backups`, `restore_backups` | 1788–1964 | Backup management |
-| `move_backups`, `optimize_backups` | 1964–2087 | Migration and cleanup |
+| `optimize_backups` | 1964–2087 | Backup seeding for future auto-merge |
 | `prepare_filenames_for_updating`, `prepare_filenames_for_restoring` | 934, 1803 | Path normalization |
 
 ### Merge tools (keep)
@@ -141,7 +137,6 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `check_gui` | 608 | X11 availability check |
 | `launch_tool` | 692 | Build per-tool command lines |
 | `tool_intro` | 2148 | User guidance per tool |
-| `diff_two_files`, `diff_three_files` | 2121–2148 | Ad-hoc diff mode |
 
 ### Utilities (keep)
 
@@ -159,6 +154,10 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 |-----------------------|----------|----------------|
 | ~~`breakpoint`~~ | Zero call sites | **Removed** (stage 3) |
 | ~~`test_code` / `--test`~~ | Empty stub; superseded by `test/run-tests.sh` | **Removed** (issue #27) |
+| ~~`list_dirs` / `-s`~~ | Debug wrapper over `portageq config_protect` | **Removed** (issue #28) |
+| ~~`diff_two_files`, `diff_three_files`~~ | Undocumented ad-hoc merge shortcut | **Removed** (issue #28) |
+| ~~`move_backups` / `--move-backups`~~ | Pre-1.8.0 inline backup migration | **Removed** (issue #28) |
+| ~~`$log_file`, `@merge_history`~~ | Only referenced in commented merge logging | **Removed** (issue #28) |
 | ~~emerge wrappers / phphelper~~ | Superseded by Portage bashrc hook | **Removed** (stage 3) |
 | Stale hook/merge messages in `cfg-update` | xxdiff defaults, "alias" wording | **Fixed** (stage 3) |
 
@@ -327,6 +326,7 @@ Each scenario has `etc/` (live + `._cfg*` files), optional `backups/etc/test/` (
 | ~~emerge wrapper scripts~~ | — | Removed (stage 3) |
 | ~~PHP helper~~ | — | Removed (stage 3) |
 | ~~`--test` stub / `test_code`~~ | — | Removed (issue #27); use `test/run-tests.sh` |
+| ~~`-s`, ad-hoc diff modes, `--move-backups`~~ | — | Removed (issue #28, 1.10.1) |
 | ~~`breakpoint` subroutine~~ | — | Removed (stage 3) |
 
 ---

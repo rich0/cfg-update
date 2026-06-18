@@ -618,15 +618,29 @@ tier_a_no_index() {
         '<< Stage1 >>.*not found, skipping' "$output"
 }
 
-tier_a_protected_dirs() {
-    echo "=== Tier A: protected dirs (-s) ==="
-    setup_sandbox all
-    local output
+tier_a_removed_flags() {
+    echo "=== Tier A: removed flags regression ==="
+    local output f1 f2
+
     output="$(run_cfg_update -s 2>&1)" || true
-    assert_output_matches "protected dirs lists sandbox etc/test" \
-        "${SANDBOX}/etc/test" "$output"
-    assert_output_matches "protected dirs lists sandbox etc/test2" \
-        "${SANDBOX}/etc/test2" "$output"
+    assert_output_not_matches "removed flag: -s not accepted" \
+        'CONFIG_PROTECT|protected directories' "$output"
+    assert_output_matches "removed flag: -s shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    output="$(run_cfg_update --move-backups 2>&1)" || true
+    assert_output_not_matches "removed flag: --move-backups not accepted" \
+        'Moving backup|move your backups' "$output"
+    assert_output_matches "removed flag: --move-backups shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    f1="$FIXTURES/stage1-unmodified-text/etc/test_unmodified_file"
+    f2="$FIXTURES/stage1-unmodified-text/etc/._cfg0000_test_unmodified_file"
+    output="$(run_cfg_update "$f1" "$f2" 2>&1)" || true
+    assert_output_not_matches "removed mode: ad-hoc 2-file diff not accepted" \
+        'Merged output has been saved' "$output"
+    assert_output_matches "removed mode: ad-hoc 2-file diff shows usage" \
+        'missing valid options|USAGE' "$output"
 }
 
 tier_a_multi_config_protect() {
@@ -634,12 +648,6 @@ tier_a_multi_config_protect() {
     local output
 
     setup_multi_config_protect_sandbox auto
-    output="$(run_cfg_update -s 2>&1)" || true
-    assert_output_matches "multi-dir: protected lists etc/test" \
-        "${SANDBOX}/etc/test" "$output"
-    assert_output_matches "multi-dir: protected lists etc/test2" \
-        "${SANDBOX}/etc/test2" "$output"
-
     output="$(run_cfg_update -lv 2>&1)" || true
     assert_output_matches "multi-dir: classifies marker in etc/test" \
         'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*etc/test/._cfg0000_test_unmodified_file' "$output"
@@ -911,6 +919,18 @@ tier_f_backups_maintenance() {
     assert_file_contains "optimize-backups backup matches live file" \
         "$backup_root/._new-cfg_test_unmodified_file" "#version 1.0"
 
+    setup_sandbox stage1-unmodified-text auto
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    run_cfg_update -au >/dev/null
+    assert_file_exists "stage1 update created old backup in BACKUP_PATH" \
+        "$backup_root/._old-cfg_test_unmodified_file"
+    assert_file_exists "stage1 update created new backup in BACKUP_PATH" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_missing "stage1 backups not written inline under etc/test (old)" \
+        "$SANDBOX/etc/test/._old-cfg_test_unmodified_file"
+    assert_missing "stage1 backups not written inline under etc/test (new)" \
+        "$SANDBOX/etc/test/._new-cfg_test_unmodified_file"
+
     setup_sandbox stage1-unmodified-text
     output="$(run_cfg_update --mount 2>&1)" || true
     assert_output_not_matches "removed flag: --mount not accepted" \
@@ -995,7 +1015,7 @@ main() {
     tier_a_classify_combined
     tier_a_per_scenario
     tier_a_no_index
-    tier_a_protected_dirs
+    tier_a_removed_flags
     tier_a_multi_config_protect
     tier_a_ancestor_backups
     tier_b_pretend_auto
