@@ -35,10 +35,10 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.10.1";
+    my $version           = "1.10.2";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
-    my $website           = "http://people.zeelandnet.nl/xentric";
+    my $website           = "https://github.com/rich0/cfg-update";
 # Set default settings...
     my $pkg_manager       = "Portage";
     my $install_log       = "/var/log/emerge.log";
@@ -522,7 +522,7 @@ sub check_gui{
         print "$tab"."  If you use this script on a system without an X-server you should permanently\n";
         print "$tab"."  set the MERGETOOL variable in $settings to vimdiff or sdiff.\n";
         print "$tab"."  I recommend the more advanced vimdiff on systems without an X-server.\n";
-        print "$tab"."  See $website for vimdiff usage instructions.\n\n";
+        print "$tab"."  See \"man cfg-update\" for merge tool usage instructions.\n\n";
         exit;
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</check_gui>\n"; }
@@ -1938,7 +1938,7 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."\n";
         print "$tab"."  -t [tool], --tool [tool]\n";
         print "$tab"."          Set mergetool, overrides the default setting in $settings\n";
-        print "$tab"."          GUI tools: xxdiff, kdiff3, meld, tkdiff, gtkdiff, gvimdiff\n";
+        print "$tab"."          GUI tools: meld, kdiff3, xxdiff, tkdiff, gtkdiff, gvimdiff\n";
         print "$tab"."          CLI tools: vimdiff, sdiff, imediff2, imediff\n";
         print "$tab"."\n";
         print "$tab"."  -p, --pretend\n";
