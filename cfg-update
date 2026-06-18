@@ -285,14 +285,19 @@ $Term::ANSIColor::AUTORESET = 1;
 # Check the mergetool (except when --ebuild option is used)...
     if ($opt_ebuild == 0) {
         &check_tool;
-    } else {
-        # Sandbox tests use --ebuild; set capability flags without probing the host.
+    } elsif ($opt_testsandbox) {
+        # Sandbox tests use --ebuild: permissive capability flags; classify GUI tools from config.
         $tool_supports_2way = "yes";
         $tool_supports_3way = "yes";
         $tool_saves_mergefile_when_aborted = "no";
-        if ($merge_tool_name =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+        if (&launched_tool_needs_gui($merge_tool_name)) {
             $tool_needs_gui = "yes";
         }
+    } else {
+        # Ebuild test context without sandbox: set capability flags without probing the host.
+        $tool_supports_2way = "yes";
+        $tool_supports_3way = "yes";
+        $tool_saves_mergefile_when_aborted = "no";
     }
 
 ######################################################################################################################
@@ -520,8 +525,8 @@ sub check_gui{
     if ($opt_d >= 1) { print "$tab"."merge_tool       = $merge_tool\n"; }
     if ($opt_d >= 1) { print "$tab"."merge_tool_name  = $merge_tool_name\n"; }
     if ($opt_d >= 1) { print "$tab"."tool_needs_gui   = $tool_needs_gui\n"; }
-    if ($opt_d >= 1) { print "$tab"."xhost &>/dev/null; echo $?\n"; }
-    if ((`xhost &>/dev/null; echo \$?` =~ "1") && ($tool_needs_gui =~ "yes") && ($opt_a == 0) && ($opt_p == 0)) {
+    if ($opt_d >= 1) { print "$tab"."xhost 2>/dev/null; echo $?\n"; }
+    if ((`xhost 2>/dev/null; echo \$?` =~ /^1$/) && ($tool_needs_gui =~ "yes") && ($opt_a == 0) && ($opt_p == 0)) {
         print BOLD YELLOW "$tab"."* GUI not available, unable to run the mergetool set in $settings!\n";
         print BOLD YELLOW "$tab"."  Run $progname from within an X-terminal if you want to use a GUI mergetool.\n";
         print "$tab"."  If you are getting this from within an X-terminal, you should try running\n";
@@ -589,7 +594,7 @@ sub check_tool{
         if ($opt_d >= 1) { print "$tab"."tool_saves_mergefile_when_aborted = $tool_saves_mergefile_when_aborted\n"; }
     }
 # Check if tool needs the GUI...
-    if ($merge_tool_name =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+    if (&launched_tool_needs_gui($merge_tool_name)) {
         $tool_needs_gui = "yes";
         if ($opt_d >= 1) { print "$tab"."tool_needs_gui                    = $tool_needs_gui\n"; }
     } else {

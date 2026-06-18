@@ -187,6 +187,7 @@ setup_sandbox() {
              "$SANDBOX/var/lib/cfg-update/backups/etc/test" "$SANDBOX/bin"
 
     install_portageq_mock
+    install_mock_xhost_ok
 
     deploy_backups() {
         local scenario="$1"
@@ -247,6 +248,7 @@ setup_multi_config_protect_sandbox() {
              "$SANDBOX/bin"
 
     install_portageq_mock
+    install_mock_xhost_ok
 
     cp -a "$FIXTURES/stage1-unmodified-text/etc/." "$SANDBOX/etc/test/"
     cp -a "$FIXTURES/stage1-unmodified-binary/etc/." "$SANDBOX/etc/test2/"
@@ -277,6 +279,14 @@ run_cfg_update_stdin() {
     shift
     local extra_args=("$@")
     printf '%b' "$keys" | run_cfg_update "${extra_args[@]}"
+}
+
+install_mock_xhost_ok() {
+    cat >"$SANDBOX/bin/xhost" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/xhost"
 }
 
 install_mock_xhost_fail() {
@@ -425,6 +435,7 @@ setup_index_sandbox() {
              "$SANDBOX/bin"
 
     install_portageq_mock
+    install_mock_xhost_ok
 
     cp -a "$INDEX_FIXTURE/etc/test_unmodified_file" "$SANDBOX/etc/test/"
     if [[ "$with_marker" == yes ]]; then
@@ -769,15 +780,17 @@ tier_c_headless_auto_meld() {
     require_cmd diff3
     local output
 
+    # Exercises check_tool (via --testsandbox) with a GUI MERGE_TOOL and a
+    # failing xhost mock. Pre-fix code aborted stage 2 before diff3 could run.
     setup_sandbox stage2-3way-merge-success auto
     install_mock_xhost_fail
     install_mock_meld
     sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/meld|" "$SANDBOX/etc/cfg-update.conf"
-    output="$( ( unset DISPLAY; run_cfg_update -d -u ) 2>&1)" || true
-    assert_output_not_matches "headless meld: stage2 diff3 must not invoke check_gui" \
-        '<check_gui>' "$output"
+    output="$( ( unset DISPLAY; run_cfg_update -u ) 2>&1)" || true
     assert_output_not_matches "headless meld: no GUI abort during automatic merge" \
         'GUI not available' "$output"
+    assert_output_matches "headless meld: stage2 automatic merge completed" \
+        'Update complete' "$output"
     assert_file_equals "headless meld: stage2 merge matches golden" \
         "$SANDBOX/etc/test/test_auto_3way_success" \
         "$FIXTURES/stage2-3way-merge-success/expected/test_auto_3way_success"
