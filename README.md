@@ -2,14 +2,12 @@
 
 I'm in the process of using an LLM to clean up some of the dead code branches here.
 I'm being conservative, but please use care before using the 1.9.0+ releases.  
-Feedback is welcome.  Eventually I might port this to python, but the initial focus is on trimming
-unused legacy features.  A few obvious bugs were fixed, as well as dilfridge's patch.
+Feedback is welcome.
 
 # cfg-update
 
 A safe, staged alternative to Gentoo's `etc-update` for handling configuration file updates after package merges.
 
-**Maintained fork:** [rich0/cfg-update](https://github.com/rich0/cfg-update)  
 **Version:** 1.10.1  
 **License:** GPL-2 ([COPYING](COPYING))
 
