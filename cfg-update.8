@@ -108,7 +108,7 @@ In Stage1 cfg\-update will look at the md5\-checksum of the current configuratio
 
 .SH "STAGE2"
 .LP
-Stage2 uses a second automatic updating method. This stage tries to automatically update modified files. It looks for backups of previous updates and uses the previous update for a 3\-way diff with the current file and the new update. The files are sent through the diff3 tool and the merged output is saved. If the merged output contains a merge\-conflict it will cancel the automatic update and if there are no merge\-conflicts it will complete the update.
+Stage2 uses a second automatic updating method. This stage tries to automatically update modified files. It looks for backups of previous updates and uses the previous update for a 3\-way diff with the current file and the new update. The files are sent through the diff3 tool and the merged output is saved. If the merged output contains a merge\-conflict it will cancel the automatic update and if there are no merge\-conflicts it will complete the update. Stages 1 and 2 do not require an X\-server even when MERGE_TOOL is a GUI tool; X11 is only needed when a manual stage launches that tool.
 
 .SH "STAGE3"
 .LP
