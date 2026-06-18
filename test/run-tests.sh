@@ -279,6 +279,22 @@ run_cfg_update_stdin() {
     printf '%b' "$keys" | run_cfg_update "${extra_args[@]}"
 }
 
+install_mock_xhost_fail() {
+    cat >"$SANDBOX/bin/xhost" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+    chmod +x "$SANDBOX/bin/xhost"
+}
+
+install_mock_meld() {
+    cat >"$SANDBOX/bin/meld" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/meld"
+}
+
 install_mock_kdiff3() {
     local golden_merge="${1:-}"
     cat >"$SANDBOX/bin/kdiff3" <<'EOF'
@@ -748,6 +764,27 @@ tier_c_execute_auto() {
         '<< Stage3 >>' "$output"
 }
 
+tier_c_headless_auto_meld() {
+    echo "=== Tier C: headless automatic merge with GUI MERGE_TOOL (-u) ==="
+    require_cmd diff3
+    local output
+
+    setup_sandbox stage2-3way-merge-success auto
+    install_mock_xhost_fail
+    install_mock_meld
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/meld|" "$SANDBOX/etc/cfg-update.conf"
+    output="$( ( unset DISPLAY; run_cfg_update -d -u ) 2>&1)" || true
+    assert_output_not_matches "headless meld: stage2 diff3 must not invoke check_gui" \
+        '<check_gui>' "$output"
+    assert_output_not_matches "headless meld: no GUI abort during automatic merge" \
+        'GUI not available' "$output"
+    assert_file_equals "headless meld: stage2 merge matches golden" \
+        "$SANDBOX/etc/test/test_auto_3way_success" \
+        "$FIXTURES/stage2-3way-merge-success/expected/test_auto_3way_success"
+    assert_missing "headless meld: stage2 removed cfg marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_auto_3way_success"
+}
+
 tier_d_execute_manual() {
     echo "=== Tier D: execute manual (-u, stage-isolated, stdin) ==="
     local output
@@ -1020,6 +1057,7 @@ main() {
     tier_a_ancestor_backups
     tier_b_pretend_auto
     tier_c_execute_auto
+    tier_c_headless_auto_meld
     tier_d_execute_manual
     tier_e_index_portage
     tier_f_backups_maintenance

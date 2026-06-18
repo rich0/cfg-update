@@ -7,6 +7,12 @@
   Align merge tool defaults with cfg-update.conf (meld); list meld as the
   primary example in help and docs; fix dead project URL (issue #25).
 
+*cfg-update-1.10.2 (18 JUN 2026)
+
+  Automatic stages 1 and 2 no longer require X11 when MERGE_TOOL is a GUI
+  tool; the GUI availability check runs only when a GUI merge tool is
+  actually launched (issue #40).
+
 *cfg-update-1.10.1 (18 JUN 2026)
 
   Prune niche/debug features: -s/--show-protected-dirs, ad-hoc diff modes,

@@ -290,6 +290,9 @@ $Term::ANSIColor::AUTORESET = 1;
         $tool_supports_2way = "yes";
         $tool_supports_3way = "yes";
         $tool_saves_mergefile_when_aborted = "no";
+        if ($merge_tool_name =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+            $tool_needs_gui = "yes";
+        }
     }
 
 ######################################################################################################################
@@ -508,6 +511,10 @@ sub build_index{
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</build_index>\n"; }
 }
 
+sub launched_tool_needs_gui { #ARGS# ($tool_path)
+    return ($_[0] =~ /\/xxdiff$|^xxdiff$|\/kdiff3$|^kdiff3$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$|\/gvimdiff$|^gvimdiff$/);
+}
+
 sub check_gui{
     if ($opt_d >= 1) { print "$tab"."<check_gui>\n"; $tab = $tab."    "; }
     if ($opt_d >= 1) { print "$tab"."merge_tool       = $merge_tool\n"; }
@@ -594,7 +601,7 @@ sub check_tool{
 
 sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if ($opt_d >= 1) { print "$tab"."<launch_tool>\n"; $tab = $tab."    "; }
-    if (($_[0] =~ /execute/) && ($tool_needs_gui =~ "yes")) { &check_gui; }
+    if (($_[0] =~ /execute/) && &launched_tool_needs_gui($_[1])) { &check_gui; }
     chomp (my $screenwidth = `stty size | awk '{ print \$2 }' $debug`); # determine width of current screen or window
     $cmd = "$_[1] $file1 $file2 $debug";                                # default command string for basic functionality with unsupported tools
     if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $file1 $file4 $file2 -M $file5 $debug"; }
