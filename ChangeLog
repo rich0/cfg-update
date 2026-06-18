@@ -11,6 +11,72 @@
   Remove undocumented --test runmode and test_code stub; use test/run-tests.sh
   instead (issue #27).
 
+*cfg-update-1.10.0 (17 JUN 2026)
+
+  Remove deprecated sshfs multi-host support; refactor file state codes to
+  named constants (issue #16); expand test coverage (Tier A checksum.index,
+  Tier F backup/maintenance).
+
+*cfg-update-1.9.2 (17 JUN 2026)
+
+  Add rootless sandbox test harness (test/run-tests.sh, --testsandbox);
+  expand golden-file and stage 3-5 merge-mode tests; add Tier D/E index and
+  handler tests; remove ancient path migration (issue #14); wire ebuild
+  src_test with USE=test.
+
+*cfg-update-1.9.1 (16 JUN 2026)
+
+  Bump displayed version to 1.9.1; Paludis best-effort hook fixes (stage 5);
+  deprecate sshfs multi-host support (stage 4); clean up prototype ebuild.
+
+*cfg-update-1.9.0 (16 JUN 2026)
+
+  Remove legacy emerge wrappers and dead Perl code (stage 3); add README,
+  architecture/dependency docs, and project inventory; add vendored Gentoo
+  ebuild reference; merge uninitialised-value fix in determine_state.
+
+*cfg-update-1.8.11 (27 JUL 2025)
+
+  Fix uninitialised $md5sum_file comparison in determine_state (Thanks-to:
+  Phil Stracchino, Kerin Millar, Sam James).
+
+*cfg-update-1.8.10 (27 JUL 2025)
+
+  Fix imediff/imediff2 merge-tool detection; add imediff 3-way merge support
+  (patch from Grzegorz Kulewski).
+
+*cfg-update-1.8.9 (30 SEP 2014)
+
+  Stop using bash for interactive key reads in readkey.
+
+*cfg-update-1.8.8 (07 JAN 2014)
+
+  Remove /root/.bashrc emerge-alias scaffolding and ALIAS_FILE config
+  handling; drop bundled .bashrc.
+
+*cfg-update-1.8.7 (12 NOV 2011)
+
+  Fix stage 3/4 [1] handler to call update_replace_complete (not
+  update_merge_complete); clarify replace/keep prompts.
+
+*cfg-update-1.8.6 (29 OCT 2011)
+
+  Integrate Paludis patches from Marc-Antoine Perennou; simplify Paludis
+  hook code.
+
+*cfg-update-1.8.5 (15 OCT 2011)
+
+  Add [1]/[2] quick-replace options to stage 3/4 manual-merge prompts.
+
+*cfg-update-1.8.4 (02 OCT 2011)
+
+  Re-add xxdiff to supported merge tools in cfg-update.conf.
+
+*cfg-update-1.8.3 (01 OCT 2011)
+
+  Change default merge tool to meld; add beediff to supported tools; update
+  Portage bashrc hook to pre_pkg_setup() style (Gentoo portage -r2 patch).
+
 *cfg-update-1.8.2-r1 (18 MAY 2007)
 
   18 MAY 2007; S. van Boven <sboven@zeelandnet.nl> cfg-update
