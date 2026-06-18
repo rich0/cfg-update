@@ -208,7 +208,6 @@ These enable stage 2's 3-way merges on subsequent updates.
 | `-b` / `--backups` | List available backups |
 | `-r N` / `--restore N` | Restore backup #N |
 | `--optimize-backups` | Remove redundant backups while keeping merge-capable pairs |
-| `--move-backups` | Migrate backup directory (used during package upgrades) |
 
 ## Key global paths
 

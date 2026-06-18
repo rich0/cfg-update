@@ -76,14 +76,6 @@ src_install() {
 }
 
 pkg_postinst() {
-
-	if [[ -z ${ROOT} ]]
-	then
-		ebegin "Moving backups to /var/lib/cfg-update/backups"
-		/usr/bin/cfg-update --ebuild --move-backups
-		eend $?
-	fi
-
 	echo
 	einfo "If this is a first time install, please check the configuration"
 	einfo "in /etc/cfg-update.conf before using cfg-update:"

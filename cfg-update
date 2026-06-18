@@ -31,15 +31,11 @@ $Term::ANSIColor::AUTORESET = 1;
 #
 
 ######################################################################################################################
-#                                          TODO_LIST                                                                 #
-######################################################################################################################
-
-######################################################################################################################
 #                                          GLOBAL VARIABLES AND SETTINGS                                             #
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.10.0";
+    my $version           = "1.10.1";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
     my $website           = "http://people.zeelandnet.nl/xentric";
@@ -58,7 +54,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $backup_path       = "/var/lib/cfg-update/backups";
     my $index_file        = "/var/lib/cfg-update/checksum.index";
     my $settings          = "/etc/cfg-update.conf";
-    my $log_file          = "/var/lib/cfg-update/cfg-update.log";
     $settings   = $ENV{CFG_UPDATE_CONF}  if defined $ENV{CFG_UPDATE_CONF}  && $ENV{CFG_UPDATE_CONF}  ne "";
     my $enable_backups    = "yes";
     my $enable_stage1     = "yes";
@@ -97,8 +92,6 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*INSTALL_LOG\s*=\s*/i)       { $install_log = &strip($'); $install_log_configured = 1; }
         if ($line =~ /^\s*PORTAGE_HOOK\s*=\s*/i)      { $portage_hook      = &strip($'); }
         if ($line =~ /^\s*PALUDIS_HOOK\s*=\s*/i)      { $paludis_hook      = &strip($'); }
-        if ($line =~ /^\s*LOGFILE\s*=\s*/i)           { $log_file          = &strip($'); }
-        if ($line =~ /^\s*LOG_FILE\s*=\s*/i)          { $log_file          = &strip($'); }
         if ($line =~ /^\s*ROOTDIR\s*=\s*/i)           { $rootdir           = &strip($'); }
         if ($line =~ /^\s*XXDIFF_STYLE\s*=\s*/i)      { $xxdiff_style      = &strip($'); }
         if ($line =~ /^\s*CONFIG_NEW\s*=\s*/i)        { $config_new        = &strip($'); }
@@ -113,8 +106,6 @@ $Term::ANSIColor::AUTORESET = 1;
         if ($line =~ /^\s*MERGED\s*=\s*/i)            { $merged            = &strip($'); }
     }
     close(FILE);
-# Check for trailing slash on backup_path...
-    if ($backup_path =~ /\/$/) { chop($backup_path); }   # remove trailing slash if found
 # Check for trailing slash on backup_path...
     if ($backup_path =~ /\/$/) { chop($backup_path); }   # remove trailing slash if found
 # Check if backup_path exists...
@@ -138,7 +129,6 @@ $Term::ANSIColor::AUTORESET = 1;
         'FL' => 'File to Link     ',
         'LL' => 'Link to Link     ',
     );
-###    my $indexing_complete = "undefined";
     my $md5sum;
     my $md5sum_file;
     my $md5sum_index;
@@ -163,7 +153,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my @stage3_queue;
     my @stage4_queue;
     my @stage5_queue;
-    my @merge_history;
     my $input;
     my $key;
     my $num;
@@ -192,7 +181,6 @@ $Term::ANSIColor::AUTORESET = 1;
 # Set variables for commandline arguments...
     my $opt_i = 0;
     my $opt_f = 0;
-    my $opt_s = 0;
     my $opt_l = 0;
     my $opt_u = 0;
     my $opt_b = 0;
@@ -207,9 +195,6 @@ $Term::ANSIColor::AUTORESET = 1;
     my $opt_ebuild = 0;
     my $opt_testsandbox = 0;
     my $opt_paludis = 0;
-    my $opt_move_backups = 0;
-#    my $opt_enable_portage_hook = 0;
-#    my $opt_enable_paludis_hook = 0;
     my $opt_disable_portage_hook = 0;
     my $opt_disable_paludis_hook = 0;
     my $opt_optimize_backups = 0;
@@ -217,7 +202,6 @@ $Term::ANSIColor::AUTORESET = 1;
     for (my $j = 0; $j < 25; ++$j) {
         GetOptions ('f|force+'                 => \$opt_f);
         GetOptions ('i|index+'                 => \$opt_i);
-        GetOptions ('s|show-protected-dirs+'   => \$opt_s);
         GetOptions ('l|list+'                  => \$opt_l);
         GetOptions ('u|update+'                => \$opt_u);
         GetOptions ('b|backups+'               => \$opt_b);
@@ -234,7 +218,6 @@ $Term::ANSIColor::AUTORESET = 1;
         GetOptions ('paludis+'                 => \$opt_paludis);
         GetOptions ('ebuild+'                  => \$opt_ebuild);
         GetOptions ('testsandbox+'             => \$opt_testsandbox);
-        GetOptions ('move-backups+'            => \$opt_move_backups);
         GetOptions ('optimize-backups+'        => \$opt_optimize_backups);
     }
 # Update the mergetool and mergetoolname variable with optional commandline argument -t...
@@ -315,26 +298,21 @@ $Term::ANSIColor::AUTORESET = 1;
 
 # Reject unrecognized options left in @ARGV when a runmode flag is also present (Getopt pass_through).
     if (@ARGV > 0) {
-        my $runmode = ($opt_help > 0 || $opt_s > 0 || $opt_l > 0 || $opt_u > 0 ||
+        my $runmode = ($opt_help > 0 || $opt_l > 0 || $opt_u > 0 ||
                        $opt_b > 0 || $opt_r > 0 || $opt_disable_portage_hook > 0 || $opt_disable_paludis_hook > 0 ||
-                       $opt_move_backups > 0 || $opt_optimize_backups > 0);
+                       $opt_optimize_backups > 0);
         if ($runmode) { &print_usage; exit; }
     }
 
 # Go to runmode subroutine (optionally preceeded by checks) if a corresponding argument is found. Exit when done...
     if ($opt_help > 0)                 { &print_usage; exit; }
-    if ($opt_s > 0)                    { &list_dirs; exit;}
     if ($opt_l > 0)                    { &list_updates; exit;}
     if ($opt_u > 0)                    { &root_only unless &sandbox_mode; &update_files; exit; }
     if ($opt_b > 0)                    { &list_backups; exit; }
     if ($opt_r > 0)                    { &root_only unless &sandbox_mode; &restore_backups($opt_r); exit; }
     if ($opt_disable_portage_hook > 0) { &root_only; &disable_portage_hook; exit; }
     if ($opt_disable_paludis_hook > 0) { &root_only; &disable_paludis_hook; exit; }
-    if ($opt_move_backups > 0)         { &root_only unless &sandbox_mode; &move_backups; exit; }
     if ($opt_optimize_backups > 0)     { &root_only unless &sandbox_mode; &optimize_backups; exit; }
-# If none of the above options are used, check for undocumented usage modes (2-way and 3-way diff mode)
-    if ((@ARGV == 2) && (-f $ARGV[0]) && (-f $ARGV[1]))                  { &root_only; &diff_two_files; exit;   } # Simply parsing two files to diff/merge tool
-    if ((@ARGV == 3) && (-f $ARGV[0]) && (-f $ARGV[1]) && (-f $ARGV[2])) { &root_only; &diff_three_files; exit; } # Simply parsing three files to diff/merge tool
 # Show help screen when invalid options are used...
     if ((@ARGV > 1) || ($opt_t !~ /^novalue$/)) { &print_usage; exit; }
 # Exit when there's nothing left to do...
@@ -641,24 +619,6 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
         system("$cmd");                                                 # launch the tool
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</launch_tool>\n"; }
-}
-
-sub list_dirs{ #RUNMODE# -s, --show-dirs
-    if ($opt_d >= 1) { print "$tab"."<list_dirs>\n"; $tab = $tab."    "; }
-    &find_protected_dirs;
-    print "$tab"."\n";
-    print "$tab"."These (localhost) directories are protected with CONFIG_PROTECT:\n";
-    for (my $i = 0; $i < @dir; ++$i) {
-        print "$tab"."$dir[$i]\n";
-    }
-    &find_masked_dirs;
-    print "$tab"."\n";
-    print "$tab"."These (localhost) directories are excluded with CONFIG_PROTECT_MASK:\n";
-    for (my $i = 0; $i < @maskdir; ++$i) {
-        print "$tab"."$maskdir[$i]\n";
-    }
-    print "$tab"."\n";
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</list_dirs>\n"; }
 }
 
 sub find_protected_dirs{
@@ -1505,17 +1465,12 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
     if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
-#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
-#    print "$tab"."$merge_action\n";
-#    push(@merge_history, $merge_action);
-#    `echo $merge_action >> $log_file`;
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_merge_complete>\n"; }
 }
 
 sub update_replace_complete{ #ARGS# ("pretend|execute")
     # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
     if ($opt_d >= 1) { print "$tab"."<update_replace_complete>\n"; $tab = $tab."    "; }
-#    print "$tab"."  Replacing current config file with $file2\n";
     print "$tab"."  Replacing it with $file2\n";
     if (-l $file1) {
         if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
@@ -1538,10 +1493,6 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
     if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
-#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
-#    print "$tab"."$merge_action\n";
-#    push(@merge_history, $merge_action);
-#    `echo $merge_action >> $log_file`;
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_replace_complete>\n"; }
 }
 
@@ -1563,10 +1514,6 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
     if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
-#    my $merge_action = "$file1;$md5sum_before::$file2;$md5sum_update=>$file1;$md5sum_after";
-#    print "$tab"."$merge_action\n";
-#    push(@merge_history, $merge_action);
-#    `echo $merge_action >> $log_file`;
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_keep_complete>\n"; }
 }
 
@@ -1748,53 +1695,6 @@ sub restore_backups{ #RUNMODE# -r, --restore
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</restore_backups>\n"; }
 }
 
-sub move_backups{ #RUNMODE# --move-backups
-    if ($opt_d >= 1) { print "$tab"."<move_backups>\n"; $tab = $tab."    "; }
-# Move all existing ._old-cfg_* and ._new-cfg_* files to the backup_path (if backup_path is not empty)
-    if ($backup_path =~ /^$/) {
-        print "$tab"."   If you want to move your backups to a separate directory you should\n";
-        print "$tab"."   set the variable BACKUP_PATH in $settings\n";
-        print "$tab"."   $progname --move-backups will move your backups to this directory.\n";
-    } else {
-        &find_protected_dirs;
-        @list = ();
-        for (my $i = 0; $i < @dir; ++$i) {
-            if ($opt_d >= 1) { print "$tab"."  find $dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug\n"; }
-            push(@list, `find $dir[$i] -name '._new-cfg_*' -or -name '._old-cfg_*' $debug | sort $debug`);
-        }
-        chomp @list;
-        if (@list == 0) {
-            print "$tab"."   No backup files found in the protected directories...\n";
-            if ($enable_backups =~ /^yes$|^true$|^on$/i) {
-                print "$tab"."   Backups are currently being saved to $backup_path\n";
-            } else {
-                print "$tab"."   Backups are disabled in $settings\n";
-            }
-        } else {
-            $totalcount = @list;
-            for (my $i = 0; $i < @list; $i++) {
-                $num = $i + 1;
-                $path = dirname($list[$i]);
-                $path = $path."/";
-                $file = basename($list[$i]);
-                $file1 = $path.$file;                   # /path/._new-cfg_file or /path/._old-cfg_file (source)
-                $file2 = $backup_path.$path.$file;      # /backup_path/path/._new-cfg_file (destination)
-                $path = dirname($file2);
-                my $percentage = int($num/$totalcount*100);
-                if (!-e "$path") {
-                    if ($opt_d >= 1) { print "$tab"."mkdir -p $path\n"; }
-                    `mkdir -p $path`;
-                }
-                if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-                print "$tab"."$percentage% - Moving backup to $file2\n";
-                if ($opt_d >= 1) { print "$tab"."mv $file1 $file2\n"; }
-                `mv "$file1" "$file2"`;
-            }
-        }
-    }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</move_backups>\n"; }
-}
-
 sub optimize_backups{ #RUNMODE# --optimize-backups
     if ($opt_d >= 1) { print "$tab"."<optimize_backups>\n"; $tab = $tab."    "; }
 # Create fake backups of the previous ._cfg0000_ file to maximize chances for automatic updating
@@ -1877,33 +1777,6 @@ sub disable_paludis_hook { #RUNMODE# --disable-paludis-hook
         if ($opt_ebuild == 0) { print "$tab"."Paludis hook $paludis_hook\nDoes not exist, nothing to disable...\n"; }
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</disable_paludis_hook>\n"; }
-}
-
-sub diff_two_files { #RUNMODE# when the two arguments are both existing files
-    $file1 = $ARGV[0];                                                        # contains /etc/foo             (current)
-    $file2 = $ARGV[1];                                                        # contains /etc/._cfg0000_foo   (update)
-    $path = dirname($ARGV[0]);
-    $file = basename($ARGV[0]);
-    $file5 = $merged;
-    $file5 =~ s/\*/$file/;
-    $file5 = $path."/".$file5;                                             # contains /etc/foo.merge       (merged result)
-    $threeway_update = "no";
-    &launch_tool("execute",$merge_tool);
-    if (-s "$file5") { print "$tab"."Merged output has been saved as $file5\n"; }
-}
-
-sub diff_three_files { #RUNMODE# when the three arguments are all existing files
-    $file1 = $ARGV[0];                                                        # contains /etc/foo             (current)
-    $file4 = $ARGV[1];                                                        # contains /etc/._ancestor_foo  (ancestor)
-    $file2 = $ARGV[2];                                                        # contains /etc/._cfg0000_foo   (update)
-    $path = dirname($ARGV[0]);
-    $file = basename($ARGV[0]);
-    $file5 = $merged;
-    $file5 =~ s/\*/$file/;
-    $file5 = $path."/".$file5;                                             # contains /etc/foo.merge       (merged result)
-    $threeway_update = "yes";
-    &launch_tool("execute",$merge_tool);
-    if (-s "$file5") { print "$tab"."Merged output has been saved as $file5\n"; }
 }
 
 sub tool_intro{ #ARGS# ("mergetoolname")
@@ -2088,10 +1961,6 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."          The Portage hook will execute: $progname --index\n";
         print "$tab"."          The Paludis hook will execute: $progname --index --paludis\n";
         print "$tab"."\n";
-        print "$tab"."  -s, --show-protected-dirs\n";
-        print "$tab"."          Shows directories protected by the CONFIG_PROTECT system variable\n";
-        print "$tab"."          $progname searches for updates in the CONFIG_PROTECT directories\n";
-        print "$tab"."\n";
         print "$tab"."  --optimize-backups\n";
         print "$tab"."          Backups can be used for automatic 3-way merging. This option creates\n";
         print "$tab"."          extra backups to maximize the chances of future automatic updates\n";
@@ -2179,7 +2048,6 @@ sub show_debug_info {
         print "$tab"."merged            = $merged\n";
         print "$tab"."opt_i = $opt_i\n";
         print "$tab"."opt_f = $opt_f\n";
-        print "$tab"."opt_s = $opt_s\n";
         print "$tab"."opt_l = $opt_l\n";
         print "$tab"."opt_u = $opt_u\n";
         print "$tab"."opt_b = $opt_b\n";
@@ -2193,7 +2061,6 @@ sub show_debug_info {
         print "$tab"."opt_help                 = $opt_help\n";
         print "$tab"."opt_ebuild               = $opt_ebuild\n";
         print "$tab"."opt_testsandbox          = $opt_testsandbox\n";
-        print "$tab"."opt_move_backups         = $opt_move_backups\n";
         print "$tab"."opt_disable_portage_hook = $opt_disable_portage_hook\n";
         print "$tab"."opt_disable_paludis_hook = $opt_disable_paludis_hook\n";
         print "$tab"."opt_optimize_backups     = $opt_optimize_backups\n";
