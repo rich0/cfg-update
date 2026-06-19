@@ -1718,6 +1718,8 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         $cfg_basename = basename($list[$i]);
         $path_live = $path.$cfg_basename;                           # /path/file                  <-- live protected file
         $path_new = $backup_path.$path."._new-cfg_".$cfg_basename; # /backup_path/path/._new-cfg_file
+        # OVERLOAD: $path_new is the would-be backup-new path here, not the Portage
+        # ._cfg0000_* marker used elsewhere; see issue #42.
         $path_backup_new = "";
         $path_merged = "";
         &determine_state;
