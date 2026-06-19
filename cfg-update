@@ -35,7 +35,7 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.10.2";
+    my $version           = "1.10.4";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
     my $website           = "https://github.com/rich0/cfg-update";
