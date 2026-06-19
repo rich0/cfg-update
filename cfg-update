@@ -142,7 +142,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $tool_supports_2way;
     my $tool_supports_3way;
     my $tool_saves_mergefile_when_aborted;
-    my $merge_conflict;
+    my $has_merge_conflict;
     my $ancestor_found;
     my $cmd;
     my @dir;
@@ -783,14 +783,14 @@ sub determine_state{ #DEPS# (requires that global variable $path_live contains a
     if (-f "$path_merged") {
         local $ENV{LC_ALL}="C";
         if (`grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" "$path_merged" $debug`) {
-            $merge_conflict = "true";
+            $has_merge_conflict = "true";
         } else {
-            $merge_conflict = "false";
+            $has_merge_conflict = "false";
         }
     } else {
-        $merge_conflict = "false";
+        $has_merge_conflict = "false";
     }
-    if ($opt_d >= 1) { print "$tab"."  Merge conflict detected   : $merge_conflict\n"; }
+    if ($opt_d >= 1) { print "$tab"."  Merge conflict detected   : $has_merge_conflict\n"; }
     if (-x $path_live) {
         $is_executable = "yes";
     } else {
@@ -823,7 +823,7 @@ sub list_updates{ #RUNMODE# -l, --list
             if ($opt_v >= 1) { print "$tab"."Stage[1]  "; }
             print "$tab"."$vstate  $list[$i]\n";
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($has_merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
                 $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                 if ($opt_v >= 1) { print "$tab"."Stage[2]  "; }
@@ -903,7 +903,7 @@ sub schedule_automatic_updates{
         if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($has_merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
             }
         }
