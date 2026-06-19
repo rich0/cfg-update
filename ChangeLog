@@ -2,12 +2,6 @@
 # Copyright 2002-2005 Gentoo Technologies, Inc.; Distributed under the GPL v2
 # $Header: $
 
-*cfg-update-1.10.4 (19 JUN 2026)
-
-  Rename internal $file# path variables to descriptive names ($path_live,
-  $path_new, etc.) and related globals ($cfg_basename, $has_ancestor,
-  $has_merge_conflict, $is_executable) (issue #31).
-
 *cfg-update-1.10.3 (18 JUN 2026)
 
   Align merge tool defaults with cfg-update.conf (meld); list meld as the
