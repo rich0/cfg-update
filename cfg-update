@@ -160,13 +160,13 @@ $Term::ANSIColor::AUTORESET = 1;
     my $totalcount;
     my $path;
     my $file;
-    my $file1;        # /path/file                  <--  current /etc/foo
-    my $path_new;        # /path/._cfg0000_file        <--  current /etc/._cfg0000_foo
-    my $path_backup_old;        # /path/._old-cfg_file        <--  previous /etc/foo
-    my $path_backup_new;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
-    my $path_merged;        # /path/file.merge            <--  merged result
-    my $path_temp_old;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
-    my $path_temp_new;        # /path/._temp_new-cfg_file   <--  temporary copy of current /etc/._cfg0000_foo during merging
+    my $path_live;        # /path/file                  <-- live protected config (/etc/foo)
+    my $path_new;        # /path/._cfg0000_file        <-- Portage update marker (._cfg0000_foo)
+    my $path_backup_old;        # /path/._old-cfg_file        <-- backup of previous live config
+    my $path_backup_new;        # /path/._new-cfg_file        <-- backup of previous marker (3-way ancestor)
+    my $path_merged;        # /path/file.merge            <-- merge result (*.merge)
+    my $path_temp_old;        # /path/._temp_old-cfg_file   <-- temp copy of live config during merge
+    my $path_temp_new;        # /path/._temp_new-cfg_file   <-- temp copy of marker during merge
     my $executable;
     my $ancestor;
     my $log_pkg   = "";
@@ -600,24 +600,24 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if ($opt_d >= 1) { print "$tab"."<launch_tool>\n"; $tab = $tab."    "; }
     if (($_[0] =~ /execute/) && &launched_tool_needs_gui($_[1])) { &check_gui; }
     chomp (my $screenwidth = `stty size | awk '{ print \$2 }' $debug`); # determine width of current screen or window
-    $cmd = "$_[1] $file1 $path_new $debug";                                # default command string for basic functionality with unsupported tools
-    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $file1 $path_backup_new $path_new -M $path_merged $debug"; }
-    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' $file1 $path_new -M $path_merged $debug"; }
-    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -m $file1 $path_new -b $path_backup_new -o $path_merged $debug"; }
-    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $path_new -o $path_merged $debug"; }
-    if  ($_[1] =~ /\/kompare$|^kompare$/   )                                 { $cmd = "$_[1] $path_new $file1 $debug"; }
-    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $path_backup_new $path_new $debug"; }
-    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $path_new $debug"; }
-    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $path_new -a $path_backup_new -o $path_merged $debug"; }
-    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $path_new -o $path_merged $debug"; }
-    if  ($_[1] =~ /\/vimdiff$|^vimdiff$/   )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $path_new --nofork $debug"; }
-    if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $path_new --nofork 2>\&1>/dev/null"; }
-    if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $path_merged $file1 $path_new $debug"; }
-    if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -a -o $path_merged $file1 $path_backup_new $path_new"; }
-    if (($_[1] =~ /\/imediff2?$|^imediff2?$/ ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] -a -o $path_merged $file1 $path_new"; }
-    if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $path_merged $file1 $path_new"; }
-    if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $path_new $path_backup_new $file1 > $path_merged $debug"; } # by specifying $file1 as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
-    if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $file1 $path_new $debug"; } # viewing only...
+    $cmd = "$_[1] $path_live $path_new $debug";                                # default command string for basic functionality with unsupported tools
+    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $path_live $path_backup_new $path_new -M $path_merged $debug"; }
+    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' $path_live $path_new -M $path_merged $debug"; }
+    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -m $path_live $path_new -b $path_backup_new -o $path_merged $debug"; }
+    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $path_live $path_new -o $path_merged $debug"; }
+    if  ($_[1] =~ /\/kompare$|^kompare$/   )                                 { $cmd = "$_[1] $path_new $path_live $debug"; }
+    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $path_live $path_backup_new $path_new $debug"; }
+    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $path_live $path_new $debug"; }
+    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $path_live $path_new -a $path_backup_new -o $path_merged $debug"; }
+    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $path_live $path_new -o $path_merged $debug"; }
+    if  ($_[1] =~ /\/vimdiff$|^vimdiff$/   )                                 { $cmd = "$_[1] -c 'saveas $path_live' -c next -c 'setlocal nomodifiable readonly' -c prev $path_live $path_new --nofork $debug"; }
+    if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $path_live' -c next -c 'setlocal nomodifiable readonly' -c prev $path_live $path_new --nofork 2>\&1>/dev/null"; }
+    if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $path_merged $path_live $path_new $debug"; }
+    if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -a -o $path_merged $path_live $path_backup_new $path_new"; }
+    if (($_[1] =~ /\/imediff2?$|^imediff2?$/ ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] -a -o $path_merged $path_live $path_new"; }
+    if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $path_merged $path_live $path_new"; }
+    if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $path_new $path_backup_new $path_live > $path_merged $debug"; } # by specifying $path_live as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
+    if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $path_live $path_new $debug"; } # viewing only...
     if  ($_[0] =~ /execute/) {
         if ($opt_d >=1) { print "$tab"."  $cmd\n"; }
         system("$cmd");                                                 # launch the tool
@@ -712,7 +712,7 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     $path = $path."/";
     $file = basename($_[0]);
     $file =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
-    $file1 = $path.$file;                           # /path/file                  <-- current /etc/foo
+    $path_live = $path.$file;                           # /path/file                  <-- current /etc/foo
     $path_new = $_[0];                                 # /path/._cfg0000_file        <-- current /etc/._cfg0000_foo
     $path_backup_old = $backup_old;
     $path_backup_old =~ s/\*/$file/;
@@ -732,7 +732,7 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     if ($opt_d >= 1) {
         print "$tab"."  backup_path = $backup_path\n";
         print "$tab"."  path        = $path\n";
-        print "$tab"."  file1       = $file1\n";
+        print "$tab"."  path_live = $path_live\n";
         print "$tab"."  path_new = $path_new\n";
         print "$tab"."  path_backup_old = $path_backup_old\n";
         print "$tab"."  path_backup_new = $path_backup_new\n";
@@ -743,32 +743,32 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</prepare_filenames_for_updating>\n"; }
 }
 
-sub determine_state{ #DEPS# (requires that global variable $file1 contains a filename)
+sub determine_state{ #DEPS# (requires that global variable $path_live contains a filename)
     if ($opt_d >= 1) { print "$tab"."<determine_state>\n"; $tab = $tab."    "; }
     if (-f $index_file) {
-        if ($opt_d >= 1) { if (-f $file1) { print "$tab"."  md5sum $file1 $debug | cut -d\" \" -f1 $debug\n"; }}
+        if ($opt_d >= 1) { if (-f $path_live) { print "$tab"."  md5sum $path_live $debug | cut -d\" \" -f1 $debug\n"; }}
         local $ENV{LC_ALL}="C";
-        if (-f $file1) { chomp ($md5sum_file = `md5sum "$file1" $debug | cut -d" " -f1 $debug`); }
+        if (-f $path_live) { chomp ($md5sum_file = `md5sum "$path_live" $debug | cut -d" " -f1 $debug`); }
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum of current config file : $md5sum_file\n"; }
-        if ($opt_d >= 1) { print "$tab"."  grep \"$file1 \" $index_file $debug | cut -d\" \" -f2 $debug\n"; }
+        if ($opt_d >= 1) { print "$tab"."  grep \"$path_live \" $index_file $debug | cut -d\" \" -f2 $debug\n"; }
         local $ENV{LC_ALL}="C";
-        chomp ($md5sum_index = `grep "$file1 " "$index_file" $debug | cut -d" " -f2 $debug`);
+        chomp ($md5sum_index = `grep "$path_live " "$index_file" $debug | cut -d" " -f2 $debug`);
         if ($opt_d >= 1) { print "$tab"."  MD5 checksum in the checksum-index  : $md5sum_index\n"; }
         if ($md5sum_index =~ /.+/) {
             if (length($md5sum_file) && $md5sum_index !~ $md5sum_file) {
                 $state = STATE_MF;                                                  # Modified File     - checksum differs from index
-                if (-B "$file1") { $state = STATE_MB; }                             # Modified Binary   - replaced binary, auto-replace not allowed
+                if (-B "$path_live") { $state = STATE_MB; }                             # Modified Binary   - replaced binary, auto-replace not allowed
             } else {
                 $state = STATE_UF;                                                  # Unmodified File   - checksum matches index
-                if (-B "$file1") { $state = STATE_UB; }                             # Unmodified Binary - auto-replace allowed
+                if (-B "$path_live") { $state = STATE_UB; }                             # Unmodified Binary - auto-replace allowed
             }
         } else {
             $state = STATE_CF;                                                      # Custom File       - not installed with Portage
-            if (-B "$file1") { $state = STATE_CB; }                                 # Custom Binary
+            if (-B "$path_live") { $state = STATE_CB; }                                 # Custom Binary
         }
-        if ((-l $file1) && (!-l $path_new)) { $state = STATE_LF; }                     # Link to File
-        if ((!-l $file1) && (-l $path_new)) { $state = STATE_FL; }                     # File to Link
-        if ((-l $file1) && (-l $path_new)) { $state = STATE_LL; }                      # Link to Link
+        if ((-l $path_live) && (!-l $path_new)) { $state = STATE_LF; }                     # Link to File
+        if ((!-l $path_live) && (-l $path_new)) { $state = STATE_FL; }                     # File to Link
+        if ((-l $path_live) && (-l $path_new)) { $state = STATE_LL; }                      # Link to Link
     } else {
         $state = STATE_UNKNOWN;                                                     # No checksum.index on disk
     }
@@ -791,7 +791,7 @@ sub determine_state{ #DEPS# (requires that global variable $file1 contains a fil
         $merge_conflict = "false";
     }
     if ($opt_d >= 1) { print "$tab"."  Merge conflict detected   : $merge_conflict\n"; }
-    if (-x $file1) {
+    if (-x $path_live) {
         $executable = "yes";
     } else {
         $executable = "no";
@@ -817,31 +817,31 @@ sub list_updates{ #RUNMODE# -l, --list
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_UF, STATE_UB)) {
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
             $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
             if ($opt_v >= 1) { print "$tab"."Stage[1]  "; }
             print "$tab"."$vstate  $list[$i]\n";
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
                 $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                 if ($opt_v >= 1) { print "$tab"."Stage[2]  "; }
                 print "$tab"."$vstate  $list[$i]\n";
             } else {
-                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
+                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
                     push(@stage3_queue, $list[$i]);
                     $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                     if ($opt_v >= 1) { print "$tab"."Stage[3]  "; }
                     print "$tab"."$vstate  $list[$i]\n";
                 } else {
-                    if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
+                    if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
                         push(@stage4_queue, $list[$i]);
                         $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                         if ($opt_v >= 1) { print "$tab"."Stage[4]  "; }
                         print "$tab"."$vstate  $list[$i]\n";
                     } else {
-                        if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $file1))) {
+                        if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $path_live))) {
                             push(@stage5_queue, $list[$i]);
                             $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                             if ($opt_v >= 1) { print "$tab"."Stage[5]  "; }
@@ -900,10 +900,10 @@ sub schedule_automatic_updates{
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_UF, STATE_UB)) {
+        if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
             }
         }
@@ -916,13 +916,13 @@ sub schedule_manual_updates{
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
+        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
             push(@stage3_queue, $list[$i]);
         } else {
-            if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $file1) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
+            if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
                 push(@stage4_queue, $list[$i]);
             } else {
-                if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $file1))) {
+                if (($enable_stage5 =~ /^yes$|^true$|^on$/i) && (state_is($state, STATE_MB, STATE_UB, STATE_CB, STATE_LF, STATE_FL, STATE_LL) || (!-e $path_live))) {
                     push(@stage5_queue, $list[$i]);
                 }
             }
@@ -934,14 +934,14 @@ sub schedule_manual_updates{
 sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<make_temp_backups>\n"; $tab = $tab."    "; }
     if ($enable_backups =~ /^yes$|^true$|^on$/i) {
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file1\" \"$path_temp_old\"\n"; }
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_live\" \"$path_temp_old\"\n"; }
         if ($_[0] =~ /execute/) {
             $path = dirname($path_temp_old);
             if (!-d $path) {
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  mkdir -p \"$path\"\n"; }
                 `mkdir -p "$path"`;
             }
-            `cp -pP "$file1" "$path_temp_old" $debug`;
+            `cp -pP "$path_live" "$path_temp_old" $debug`;
         }
         if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_new\" \"$path_temp_new\"\n"; }
         if ($_[0] =~ /execute/) {
@@ -972,9 +972,9 @@ sub update_stage1{ #ARGS# ("pretend|execute")
             &determine_state;
             $num++;
             &make_temp_backups;
-            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
-            if (!-e $file1) {
-                print "$tab"."* $file1 not found, cannot update...\n";
+            print "$tab"."($num/$totalcount)  $path_live  *$vstate\n";
+            if (!-e $path_live) {
+                print "$tab"."* $path_live not found, cannot update...\n";
                 &update_canceled($_[0]);   # call subroutine with first ARG: "pretend" or "execute"
                 if (!-e $path_new) {
                     print "$tab"."* $path_new not found, cannot update...\n";
@@ -1009,12 +1009,12 @@ sub update_stage2{ #ARGS# ("pretend|execute")
             &determine_state;
             $num++;
             &make_temp_backups;
-            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            print "$tab"."($num/$totalcount)  $path_live  *$vstate\n";
             if (!-e $path_new) {
                 print "$tab"."* $path_new not found, cannot update...\n";
                 &update_canceled($_[0]);
-            } elsif (!-e $file1) {
-                print "$tab"."* $file1 not found, cannot update...\n";
+            } elsif (!-e $path_live) {
+                print "$tab"."* $path_live not found, cannot update...\n";
                 &update_canceled($_[0]);
             } else {
                 &launch_tool($_[0],"/usr/bin/diff3");
@@ -1054,15 +1054,15 @@ sub update_stage3{ #ARGS# ("pretend|execute")
             &determine_state;
             $num++;
             &make_temp_backups;
-            &md5sum("$file1"); $md5sum_before = $md5sum;
+            &md5sum("$path_live"); $md5sum_before = $md5sum;
             &md5sum("$path_new"); $md5sum_update = $md5sum;
-            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            print "$tab"."($num/$totalcount)  $path_live  *$vstate\n";
             &show_warning;
             if (!-e $path_new) {
                 print "$tab"."* $path_new not found, cannot update...\n";
                 &update_canceled($_[0]);
-            } elsif (!-e $file1) {
-                print "$tab"."* WARNING: $file1 not found...\n";
+            } elsif (!-e $path_live) {
+                print "$tab"."* WARNING: $path_live not found...\n";
                 print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
                 print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
                 print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
@@ -1133,7 +1133,7 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                             }
                         } else {
                             print "$tab"."  Merged result file $path_merged not found...\n";
-                            &md5sum("$file1"); $md5sum_after = $md5sum;
+                            &md5sum("$path_live"); $md5sum_after = $md5sum;
                             if ($md5sum_before =~ $md5sum_after) {
                                 print "$tab"."  No changes detected...\n";
                                 print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
@@ -1153,7 +1153,7 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                                     if ($key !~ /1|2|u|s|q/) { print "* invalid key... try again: " }
                                 }
                             } else {
-                                print "$tab"."  Merged result has been saved in $file1\n";
+                                print "$tab"."  Merged result has been saved in $path_live\n";
                                 &update_keep_complete($_[0]);
                             }
                         }
@@ -1189,15 +1189,15 @@ sub update_stage4{ #ARGS# ("pretend|execute")
             &determine_state;
             $num++;
             &make_temp_backups;
-            &md5sum("$file1"); $md5sum_before = $md5sum;
+            &md5sum("$path_live"); $md5sum_before = $md5sum;
             &md5sum("$path_new"); $md5sum_update = $md5sum;
-            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            print "$tab"."($num/$totalcount)  $path_live  *$vstate\n";
             &show_warning;
             if (!-e $path_new) {
                 print "$tab"."* $path_new not found, cannot update...\n";
                 &update_canceled($_[0]);
-            } elsif (!-e $file1) {
-                print "$tab"."* WARNING: $file1 not found...\n";
+            } elsif (!-e $path_live) {
+                print "$tab"."* WARNING: $path_live not found...\n";
                 print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
                 print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
                 print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
@@ -1280,7 +1280,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                             }
                         } else {
                             print "$tab"."  $path_merged not found...\n";
-                            &md5sum("$file1"); $md5sum_after = $md5sum;
+                            &md5sum("$path_live"); $md5sum_after = $md5sum;
                             if ($md5sum_before =~ $md5sum_after) {
                                 print "$tab"."  No changes detected...\n";
                                 print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
@@ -1300,7 +1300,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                                     if ($key !~ /1|2|u|s|q/) { print "* invalid key... try again: " }
                                 }
                             } else {
-                                print "$tab"."  Merged result has been saved in $file1\n";
+                                print "$tab"."  Merged result has been saved in $path_live\n";
                                 &update_keep_complete($_[0]);
                             }
                         }
@@ -1327,13 +1327,13 @@ sub update_stage5{ #ARGS# ("pretend|execute")
             &determine_state;
             $num++;
             &make_temp_backups;
-            print "$tab"."($num/$totalcount)  $file1  *$vstate\n";
+            print "$tab"."($num/$totalcount)  $path_live  *$vstate\n";
             &show_warning;
             if (!-e $path_new) {
                 print "$tab"."* $path_new not found, cannot update...\n";
                 &update_canceled($_[0]);
-            } elsif (!-e $file1) {
-                print "$tab"."* WARNING: $file1 not found...\n";
+            } elsif (!-e $path_live) {
+                print "$tab"."* WARNING: $path_live not found...\n";
                 print "$tab"."  Press [1] - to use the ._cfg0000_* file (RECOMMENDED)\n";
                 print "$tab"."  Press [2] - to remove the ._cfg0000_* file too (BAD CHOICE)\n";
                 print "$tab"."  Press [s] - to skip this update (to investigate first, and try again later)\n";
@@ -1349,7 +1349,7 @@ sub update_stage5{ #ARGS# ("pretend|execute")
                     if ($key !~ /1|2|s|q/) { print "* invalid key... try again: " }
                 }
             } else {
-                if (!-B "$file1") {
+                if (!-B "$path_live") {
                     print "$tab"."  This update cannot be done with the diff/merge tool...\n";
                     print "$tab"."  Press [v] - to view the differences with diff\n";
                     print "$tab"."  Press [1] - to replace the current file with the ._cfg0000_* file\n";
@@ -1452,8 +1452,8 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_merge_complete>\n"; $tab = $tab."    "; }
 #    print "$tab"."  Replacing current config file with $path_merged\n";
     print "$tab"."  Replacing it with $path_merged\n";
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_merged\" \"$file1\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_merged" "$file1" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_merged\" \"$path_live\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_merged" "$path_live" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_new\"\n"; }
@@ -1466,8 +1466,8 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_merge_complete>\n"; }
 }
@@ -1476,12 +1476,12 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
     if ($opt_d >= 1) { print "$tab"."<update_replace_complete>\n"; $tab = $tab."    "; }
     print "$tab"."  Replacing it with $path_new\n";
-    if (-l $file1) {
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
-        if ($_[0] =~ /execute/) { `rm -f "$file1" $debug`; } # remove original file first if it's a symlink, otherwise the contents of new file is copied into link target!
+    if (-l $path_live) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_live\"\n"; }
+        if ($_[0] =~ /execute/) { `rm -f "$path_live" $debug`; } # remove original file first if it's a symlink, otherwise the contents of new file is copied into link target!
     }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_new\" \"$file1\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_new" "$file1" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_new\" \"$path_live\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_new" "$path_live" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$path_backup_old\"\n"; }
@@ -1494,8 +1494,8 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist!)\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_replace_complete>\n"; }
 }
@@ -1515,8 +1515,8 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist)\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$file1" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_keep_complete>\n"; }
 }
@@ -1557,9 +1557,9 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     $path = $path."/";
     $file = basename($_[0]);
     $file =~ s/$rm_old//;                          # strips ._old-cfg_ from filename
-    $file1 = $restore_old;
-    $file1 =~ s/\*/$file/;
-    $file1 = $path.$file1;                          # /path/file                  <-- live config to restore
+    $path_live = $restore_old;
+    $path_live =~ s/\*/$file/;
+    $path_live = $path.$path_live;                          # /path/file                  <-- live config to restore
     $path_new = $restore_new;
     $path_new =~ s/\*/$file/;
     $path_new = $path.$path_new;                          # /path/._cfg0000_file        <-- ._cfg marker to restore
@@ -1578,7 +1578,7 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     if ($opt_d >= 1) {
         print "$tab"."  backup_path = $backup_path\n";
         print "$tab"."  path        = $path\n";
-        print "$tab"."  file1       = $file1\n";
+        print "$tab"."  path_live = $path_live\n";
         print "$tab"."  path_new = $path_new\n";
         print "$tab"."  path_backup_old = $path_backup_old\n";
         print "$tab"."  path_backup_new = $path_backup_new\n";
@@ -1603,14 +1603,14 @@ sub list_backups{ #RUNMODE# -b, --backup
         if ($opt_v == 0)  {
             my $date = `ls --full-time "$path_backup_old" | awk '{print \$6}' $debug`;
             chomp $date;
-            print "$tab"."$num  $date  $file1\n";
+            print "$tab"."$num  $date  $path_live\n";
         }
         if (($opt_v >= 1) || ($opt_d >= 1)) {
             print "$tab"."\n";
             &md5sum("$path_backup_old");
             print "$tab"."$num restore $md5sum $path_backup_old\n";
-            &md5sum("$file1");
-            print "$tab"."$num to      $md5sum $file1\n";
+            &md5sum("$path_live");
+            print "$tab"."$num to      $md5sum $path_live\n";
             &md5sum("$path_backup_new");
             print "$tab"."$num restore $md5sum $path_backup_new\n";
             print "$tab"."$num to      $md5sum $path_new\n";
@@ -1645,7 +1645,7 @@ sub restore_backups{ #RUNMODE# -r, --restore
         &prepare_filenames_for_restoring($list[$i]);
         $num = $i + 1;
         print "$tab"."($num/$totalcount)\n";
-        print "$tab"."  $file1\n";
+        print "$tab"."  $path_live\n";
         print "$tab"."  $path_new\n";
         if ($opt_v >= 1) {
             print "$tab"."  [y]es       restore the backup of the old and new config file\n";
@@ -1674,12 +1674,12 @@ sub restore_backups{ #RUNMODE# -r, --restore
             if ($key =~ /y/) {
                 # using copy A B followed by remove A instead of move A B because the move command doesn't handle links properly
                 print "$tab"."  Restoring both the original and update file so you can retry updating...\n";
-                if (-l $file1) {
-                    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
-                    `rm -f "$file1" $debug`; # remove original file if it's a symlink
+                if (-l $path_live) {
+                    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_live\"\n"; }
+                    `rm -f "$path_live" $debug`; # remove original file if it's a symlink
                 }
-                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_old\" \"$file1\"\n"; }
-                `cp -pP "$path_backup_old" "$file1" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_old\" \"$path_live\"\n"; }
+                `cp -pP "$path_backup_old" "$path_live" $debug`;
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_backup_old\"\n"; }
                 `rm -f "$path_backup_old" $debug`;
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_new\" \"$path_new\"\n"; }
@@ -1716,7 +1716,7 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         $path = dirname($list[$i]);
         $path = $path."/";
         $file = basename($list[$i]);
-        $file1 = $path.$file;                           # /path/file                  <-- live protected file
+        $path_live = $path.$file;                           # /path/file                  <-- live protected file
         $path_new = $backup_path.$path."._new-cfg_".$file; # /backup_path/path/._new-cfg_file
         $path_backup_new = "";
         $path_merged = "";
@@ -1724,8 +1724,8 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         my $percentage = int($num/$totalcount*100);
         if (-e "$path_new") {
             if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-            print "$tab"."$percentage% - Skip file $file1\n";
-            if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (exists in repository)\n"; }
+            print "$tab"."$percentage% - Skip file $path_live\n";
+            if ($opt_d >= 1) { print "$tab"."[$state] skip  $path_live (exists in repository)\n"; }
         } else {
             if (state_is($state, STATE_UF, STATE_UB)) {
                 $path = dirname($path_new);
@@ -1737,12 +1737,12 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
                 }
                 if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
                 print "$tab"."$percentage% - Make file $path_new\n";
-                if ($opt_d >= 1) { print "$tab"."[$state] cp -p $file1 $path_new\n"; }
-                `cp -p "$file1" "$path_new"`;
+                if ($opt_d >= 1) { print "$tab"."[$state] cp -p $path_live $path_new\n"; }
+                `cp -p "$path_live" "$path_new"`;
             } else {
                 if ($percentage < 100) { print " "; } if ($percentage < 10)  { print " "; }
-                print "$tab"."$percentage% - Skip file $file1\n";
-                if ($opt_d >= 1) { print "$tab"."[$state] skip  $file1 (not unmodified)\n"; }
+                print "$tab"."$percentage% - Skip file $path_live\n";
+                if ($opt_d >= 1) { print "$tab"."[$state] skip  $path_live (not unmodified)\n"; }
             }
         }
     }
