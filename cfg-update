@@ -163,7 +163,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $file1;        # /path/file                  <--  current /etc/foo
     my $file2;        # /path/._cfg0000_file        <--  current /etc/._cfg0000_foo
     my $file3;        # /path/._old-cfg_file        <--  previous /etc/foo
-    my $file4;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
+    my $path_backup_new;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
     my $path_merged;        # /path/file.merge            <--  merged result
     my $path_temp_old;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
     my $path_temp_new;        # /path/._temp_new-cfg_file   <--  temporary copy of current /etc/._cfg0000_foo during merging
@@ -601,22 +601,22 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if (($_[0] =~ /execute/) && &launched_tool_needs_gui($_[1])) { &check_gui; }
     chomp (my $screenwidth = `stty size | awk '{ print \$2 }' $debug`); # determine width of current screen or window
     $cmd = "$_[1] $file1 $file2 $debug";                                # default command string for basic functionality with unsupported tools
-    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $file1 $file4 $file2 -M $path_merged $debug"; }
+    if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' -m $file1 $path_backup_new $file2 -M $path_merged $debug"; }
     if (($_[1] =~ /\/xxdiff$|^xxdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $xxdiff_style --resource \'Show.PaneMergedView:true Show.Toolbar:true\' $file1 $file2 -M $path_merged $debug"; }
-    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -m $file1 $file2 -b $file4 -o $path_merged $debug"; }
+    if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -m $file1 $file2 -b $path_backup_new -o $path_merged $debug"; }
     if (($_[1] =~ /\/kdiff3$|^kdiff3$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 -o $path_merged $debug"; }
     if  ($_[1] =~ /\/kompare$|^kompare$/   )                                 { $cmd = "$_[1] $file2 $file1 $debug"; }
-    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $file4 $file2 $debug"; }
+    if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $path_backup_new $file2 $debug"; }
     if (($_[1] =~ /\/meld$|^meld$/         ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 $debug"; }
-    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $file2 -a $file4 -o $path_merged $debug"; }
+    if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] $file1 $file2 -a $path_backup_new -o $path_merged $debug"; }
     if (($_[1] =~ /\/tkdiff$|^tkdiff$/     ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] $file1 $file2 -o $path_merged $debug"; }
     if  ($_[1] =~ /\/vimdiff$|^vimdiff$/   )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $file2 --nofork $debug"; }
     if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $file1' -c next -c 'setlocal nomodifiable readonly' -c prev $file1 $file2 --nofork 2>\&1>/dev/null"; }
     if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $path_merged $file1 $file2 $debug"; }
-    if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -a -o $path_merged $file1 $file4 $file2"; }
+    if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -a -o $path_merged $file1 $path_backup_new $file2"; }
     if (($_[1] =~ /\/imediff2?$|^imediff2?$/ ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] -a -o $path_merged $file1 $file2"; }
     if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $path_merged $file1 $file2"; }
-    if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $file2 $file4 $file1 > $path_merged $debug"; } # by specifying $file1 as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
+    if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $file2 $path_backup_new $file1 > $path_merged $debug"; } # by specifying $file1 as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
     if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $file1 $file2 $debug"; } # viewing only...
     if  ($_[0] =~ /execute/) {
         if ($opt_d >=1) { print "$tab"."  $cmd\n"; }
@@ -717,9 +717,9 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     $file3 = $backup_old;
     $file3 =~ s/\*/$file/;
     $file3 = $backup_path.$path.$file3;             # /backup_path/path/._old-cfg_file   <-- previous /etc/foo
-    $file4 = $backup_new;
-    $file4 =~ s/\*/$file/;
-    $file4 = $backup_path.$path.$file4;             # /backup_path/path/._new-cfg_file   <-- previous /etc/._cfg0000_foo
+    $path_backup_new = $backup_new;
+    $path_backup_new =~ s/\*/$file/;
+    $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file   <-- previous /etc/._cfg0000_foo
     $path_merged = $merged;
     $path_merged =~ s/\*/$file/;
     $path_merged = $path.$path_merged;                          # /path/file.merge            <-- merged result
@@ -735,7 +735,7 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
         print "$tab"."  file1       = $file1\n";
         print "$tab"."  file2       = $file2\n";
         print "$tab"."  file3       = $file3\n";
-        print "$tab"."  file4       = $file4\n";
+        print "$tab"."  path_backup_new = $path_backup_new\n";
         print "$tab"."  path_merged = $path_merged\n";
         print "$tab"."  path_temp_old = $path_temp_old\n";
         print "$tab"."  path_temp_new = $path_temp_new\n";
@@ -774,7 +774,7 @@ sub determine_state{ #DEPS# (requires that global variable $file1 contains a fil
     }
     $vstate = state_label($state);
     if ($opt_d >= 1) { print "$tab"."  State of the current file : $vstate\n"; }
-    if (-e $file4) {
+    if (-e $path_backup_new) {
         $ancestor_found = "true";
     } else {
         $ancestor_found = "false";
@@ -1462,8 +1462,8 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $file1\n"; }}
@@ -1488,8 +1488,8 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist!)\n"; }
@@ -1509,8 +1509,8 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist)\n"; }
@@ -1567,9 +1567,9 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     $file3 = $backup_old;
     $file3 =~ s/\*/$file/;
     $file3 = $backup_path.$path.$file3;             # /backup_path/path/._old-cfg_file
-    $file4 = $backup_new;
-    $file4 =~ s/\*/$file/;
-    $file4 = $backup_path.$path.$file4;             # /backup_path/path/._new-cfg_file
+    $path_backup_new = $backup_new;
+    $path_backup_new =~ s/\*/$file/;
+    $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file
     $path_merged = $merged;
     $path_merged =~ s/\*/$file/;
     $path_merged = $path.$path_merged;                          # /path/file.merge
@@ -1581,7 +1581,7 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
         print "$tab"."  file1       = $file1\n";
         print "$tab"."  file2       = $file2\n";
         print "$tab"."  file3       = $file3\n";
-        print "$tab"."  file4       = $file4\n";
+        print "$tab"."  path_backup_new = $path_backup_new\n";
         print "$tab"."  path_merged = $path_merged\n";
         print "$tab"."  path_temp_old = $path_temp_old\n";
         print "$tab"."  path_temp_new = $path_temp_new\n";
@@ -1611,8 +1611,8 @@ sub list_backups{ #RUNMODE# -b, --backup
             print "$tab"."$num restore $md5sum $file3\n";
             &md5sum("$file1");
             print "$tab"."$num to      $md5sum $file1\n";
-            &md5sum("$file4");
-            print "$tab"."$num restore $md5sum $file4\n";
+            &md5sum("$path_backup_new");
+            print "$tab"."$num restore $md5sum $path_backup_new\n";
             print "$tab"."$num to      $md5sum $file2\n";
         }
     }
@@ -1682,10 +1682,10 @@ sub restore_backups{ #RUNMODE# -r, --restore
                 `cp -pP "$file3" "$file1" $debug`;
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file3\"\n"; }
                 `rm -f "$file3" $debug`;
-                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file4\" \"$file2\"\n"; }
-                `cp -pP "$file4" "$file2" $debug`;
-                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file4\"\n"; }
-                `rm -f "$file4" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_new\" \"$file2\"\n"; }
+                `cp -pP "$path_backup_new" "$file2" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_backup_new\"\n"; }
+                `rm -f "$path_backup_new" $debug`;
                 print BOLD GREEN "$tab"."Restore complete...\n";
                 print "\n";
             }
@@ -1718,7 +1718,7 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         $file = basename($list[$i]);
         $file1 = $path.$file;                           # /path/file                  <-- live protected file
         $file2 = $backup_path.$path."._new-cfg_".$file; # /backup_path/path/._new-cfg_file
-        $file4 = "";
+        $path_backup_new = "";
         $path_merged = "";
         &determine_state;
         my $percentage = int($num/$totalcount*100);
