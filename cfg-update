@@ -167,7 +167,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $path_merged;        # /path/file.merge            <-- merge result (*.merge)
     my $path_temp_old;        # /path/._temp_old-cfg_file   <-- temp copy of live config during merge
     my $path_temp_new;        # /path/._temp_new-cfg_file   <-- temp copy of marker during merge
-    my $executable;
+    my $is_executable;
     my $ancestor;
     my $log_pkg   = "";
     my $index_pkg = "";
@@ -792,11 +792,11 @@ sub determine_state{ #DEPS# (requires that global variable $path_live contains a
     }
     if ($opt_d >= 1) { print "$tab"."  Merge conflict detected   : $merge_conflict\n"; }
     if (-x $path_live) {
-        $executable = "yes";
+        $is_executable = "yes";
     } else {
-        $executable = "no";
+        $is_executable = "no";
     }
-    if ($opt_d >= 1) { print "$tab"."  Executable file           : $executable\n"; }
+    if ($opt_d >= 1) { print "$tab"."  Executable file           : $is_executable\n"; }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</determine_state>\n"; }
 }
 
@@ -1466,8 +1466,8 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($is_executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($is_executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_merge_complete>\n"; }
 }
@@ -1494,8 +1494,8 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist!)\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($is_executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($is_executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_replace_complete>\n"; }
 }
@@ -1515,8 +1515,8 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist)\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
-    if ($_[0] =~ /execute/) { if ($executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
+    if (($opt_v >= 1) || ($opt_d >= 1)) { if ($is_executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
+    if ($_[0] =~ /execute/) { if ($is_executable =~ "yes") { `chmod +x "$path_live" $debug`; }}
     print BOLD GREEN "$tab"."Update complete...\n\n";
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</update_keep_complete>\n"; }
 }
