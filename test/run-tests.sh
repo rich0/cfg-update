@@ -496,6 +496,31 @@ tier0_lint_fixtures() {
     fi
 }
 
+tier0_bump_version_dry_run() {
+    echo "=== Tier 0: bump-version dry-run ==="
+    local script="$REPO_ROOT/scripts/bump-version.sh"
+    [[ -f "$script" ]] || { skip "scripts/bump-version.sh not present"; return; }
+    [[ -x "$script" ]] || chmod +x "$script"
+    if bash -n "$script"; then
+        pass "bash -n bump-version.sh"
+    else
+        fail "bash -n bump-version.sh"
+        return
+    fi
+    local output
+    output="$("$script" 9.9.9 --dry-run 2>&1)" || { fail "bump-version.sh --dry-run exited non-zero"; return; }
+    if echo "$output" | grep -q 'git mv'; then
+        pass "bump-version dry-run mentions git mv"
+    else
+        fail "bump-version dry-run missing git mv"
+    fi
+    if echo "$output" | grep -q 'cfg-update'; then
+        pass "bump-version dry-run mentions cfg-update"
+    else
+        fail "bump-version dry-run missing cfg-update"
+    fi
+}
+
 tier_a_classify_combined() {
     echo "=== Tier A: classify combined (-lv) ==="
     setup_sandbox all
@@ -1012,6 +1037,7 @@ main() {
 
     tier0_static
     tier0_lint_fixtures
+    tier0_bump_version_dry_run
     tier_a_classify_combined
     tier_a_per_scenario
     tier_a_no_index
