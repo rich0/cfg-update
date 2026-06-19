@@ -30,16 +30,6 @@ All work on **topic branches** → PR to `develop`.
 - Tests prioritize verification of files over console output
 - Version bumps happen only during release preparation (see VERSIONING.md)
 
-## Release process (maintainer only)
-1. Ensure `develop` is up-to-date and tests pass.
-2. Merge `develop` into `master`.
-3. On `master`, run `./scripts/bump-version.sh X.Y.Z` (updates all version strings + ebuild).
-4. Manually edit the new ChangeLog entry with a concise summary.
-5. Commit the bump.
-6. `git tag -a X.Y.Z -m "Release X.Y.Z"`
-7. Push `master` + tag.
-8. (Optional) Fast-forward `develop` from the new `master`.
-
 ## Prohibitions
 - Do not create git tags (maintainer-only)
 - Do not push to `master` directly
