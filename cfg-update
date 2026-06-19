@@ -162,7 +162,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $file;
     my $file1;        # /path/file                  <--  current /etc/foo
     my $file2;        # /path/._cfg0000_file        <--  current /etc/._cfg0000_foo
-    my $file3;        # /path/._old-cfg_file        <--  previous /etc/foo
+    my $path_backup_old;        # /path/._old-cfg_file        <--  previous /etc/foo
     my $path_backup_new;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
     my $path_merged;        # /path/file.merge            <--  merged result
     my $path_temp_old;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
@@ -714,9 +714,9 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     $file =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
     $file1 = $path.$file;                           # /path/file                  <-- current /etc/foo
     $file2 = $_[0];                                 # /path/._cfg0000_file        <-- current /etc/._cfg0000_foo
-    $file3 = $backup_old;
-    $file3 =~ s/\*/$file/;
-    $file3 = $backup_path.$path.$file3;             # /backup_path/path/._old-cfg_file   <-- previous /etc/foo
+    $path_backup_old = $backup_old;
+    $path_backup_old =~ s/\*/$file/;
+    $path_backup_old = $backup_path.$path.$path_backup_old;             # /backup_path/path/._old-cfg_file   <-- previous /etc/foo
     $path_backup_new = $backup_new;
     $path_backup_new =~ s/\*/$file/;
     $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file   <-- previous /etc/._cfg0000_foo
@@ -734,7 +734,7 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
         print "$tab"."  path        = $path\n";
         print "$tab"."  file1       = $file1\n";
         print "$tab"."  file2       = $file2\n";
-        print "$tab"."  file3       = $file3\n";
+        print "$tab"."  path_backup_old = $path_backup_old\n";
         print "$tab"."  path_backup_new = $path_backup_new\n";
         print "$tab"."  path_merged = $path_merged\n";
         print "$tab"."  path_temp_old = $path_temp_old\n";
@@ -1458,8 +1458,8 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$path_merged" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$path_backup_old\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
@@ -1484,8 +1484,8 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$file2" "$file1" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$path_backup_old\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
@@ -1505,8 +1505,8 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_keep_complete>\n"; $tab = $tab."    "; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$path_backup_old\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
@@ -1564,9 +1564,9 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     $file2 =~ s/\*/$file/;
     $file2 = $path.$file2;                          # /path/._cfg0000_file        <-- ._cfg marker to restore
     if (-e $file2) { $file2 =~ s/0000/----/; }      # or /path/._cfg----_file if a newer update exists
-    $file3 = $backup_old;
-    $file3 =~ s/\*/$file/;
-    $file3 = $backup_path.$path.$file3;             # /backup_path/path/._old-cfg_file
+    $path_backup_old = $backup_old;
+    $path_backup_old =~ s/\*/$file/;
+    $path_backup_old = $backup_path.$path.$path_backup_old;             # /backup_path/path/._old-cfg_file
     $path_backup_new = $backup_new;
     $path_backup_new =~ s/\*/$file/;
     $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file
@@ -1580,7 +1580,7 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
         print "$tab"."  path        = $path\n";
         print "$tab"."  file1       = $file1\n";
         print "$tab"."  file2       = $file2\n";
-        print "$tab"."  file3       = $file3\n";
+        print "$tab"."  path_backup_old = $path_backup_old\n";
         print "$tab"."  path_backup_new = $path_backup_new\n";
         print "$tab"."  path_merged = $path_merged\n";
         print "$tab"."  path_temp_old = $path_temp_old\n";
@@ -1601,14 +1601,14 @@ sub list_backups{ #RUNMODE# -b, --backup
         if ($num < 100)  { $num = "$num "; }
         if ($num < 10)   { $num = "$num "; }
         if ($opt_v == 0)  {
-            my $date = `ls --full-time "$file3" | awk '{print \$6}' $debug`;
+            my $date = `ls --full-time "$path_backup_old" | awk '{print \$6}' $debug`;
             chomp $date;
             print "$tab"."$num  $date  $file1\n";
         }
         if (($opt_v >= 1) || ($opt_d >= 1)) {
             print "$tab"."\n";
-            &md5sum("$file3");
-            print "$tab"."$num restore $md5sum $file3\n";
+            &md5sum("$path_backup_old");
+            print "$tab"."$num restore $md5sum $path_backup_old\n";
             &md5sum("$file1");
             print "$tab"."$num to      $md5sum $file1\n";
             &md5sum("$path_backup_new");
@@ -1678,10 +1678,10 @@ sub restore_backups{ #RUNMODE# -r, --restore
                     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file1\"\n"; }
                     `rm -f "$file1" $debug`; # remove original file if it's a symlink
                 }
-                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file3\" \"$file1\"\n"; }
-                `cp -pP "$file3" "$file1" $debug`;
-                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file3\"\n"; }
-                `rm -f "$file3" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_old\" \"$file1\"\n"; }
+                `cp -pP "$path_backup_old" "$file1" $debug`;
+                if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_backup_old\"\n"; }
+                `rm -f "$path_backup_old" $debug`;
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_backup_new\" \"$file2\"\n"; }
                 `cp -pP "$path_backup_new" "$file2" $debug`;
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_backup_new\"\n"; }
