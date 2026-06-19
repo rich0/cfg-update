@@ -27,7 +27,9 @@ All work on **topic branches** → PR to `master`.
 - Branch from current `master`
 - Create PR after commit
 - Plans always evaluate functional test coverage
+- Tests prioritize verification of files over console output
 - Check git tag and bump version if current version is tagged on any change (see VERSIONING.md)
+- After version bump update changelog with concise summary
 
 ## Prohibitions
 - Do not create git tags (maintainer-only)
