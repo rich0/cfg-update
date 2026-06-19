@@ -165,7 +165,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $file3;        # /path/._old-cfg_file        <--  previous /etc/foo
     my $file4;        # /path/._new-cfg_file        <--  previous /etc/._cfg0000_foo
     my $file5;        # /path/file.merge            <--  merged result
-    my $file6;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
+    my $path_temp_old;        # /path/._temp_old-cfg_file   <--  temporary copy of current /etc/foo during merging
     my $path_temp_new;        # /path/._temp_new-cfg_file   <--  temporary copy of current /etc/._cfg0000_foo during merging
     my $executable;
     my $ancestor;
@@ -723,9 +723,9 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     $file5 = $merged;
     $file5 =~ s/\*/$file/;
     $file5 = $path.$file5;                          # /path/file.merge            <-- merged result
-    $file6 = $temp_old;
-    $file6 =~ s/\*/$file/;
-    $file6 = $backup_path.$path.$file6;             # /backup_path/path/._temp_old-cfg_file
+    $path_temp_old = $temp_old;
+    $path_temp_old =~ s/\*/$file/;
+    $path_temp_old = $backup_path.$path.$path_temp_old;             # /backup_path/path/._temp_old-cfg_file
     $path_temp_new = $temp_new;
     $path_temp_new =~ s/\*/$file/;
     $path_temp_new = $backup_path.$path.$path_temp_new;             # /backup_path/path/._temp_new-cfg_file
@@ -737,7 +737,7 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
         print "$tab"."  file3       = $file3\n";
         print "$tab"."  file4       = $file4\n";
         print "$tab"."  file5       = $file5\n";
-        print "$tab"."  file6       = $file6\n";
+        print "$tab"."  path_temp_old = $path_temp_old\n";
         print "$tab"."  path_temp_new = $path_temp_new\n";
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</prepare_filenames_for_updating>\n"; }
@@ -934,14 +934,14 @@ sub schedule_manual_updates{
 sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<make_temp_backups>\n"; $tab = $tab."    "; }
     if ($enable_backups =~ /^yes$|^true$|^on$/i) {
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file1\" \"$file6\"\n"; }
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file1\" \"$path_temp_old\"\n"; }
         if ($_[0] =~ /execute/) {
-            $path = dirname($file6);
+            $path = dirname($path_temp_old);
             if (!-d $path) {
                 if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  mkdir -p \"$path\"\n"; }
                 `mkdir -p "$path"`;
             }
-            `cp -pP "$file1" "$file6" $debug`;
+            `cp -pP "$file1" "$path_temp_old" $debug`;
         }
         if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file2\" \"$path_temp_new\"\n"; }
         if ($_[0] =~ /execute/) {
@@ -1404,8 +1404,8 @@ sub update_retry{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_retry>\n"; $tab = $tab."    "; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if ($_[0] =~ /pretend/) {
@@ -1421,8 +1421,8 @@ sub update_canceled{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_canceled>\n"; $tab = $tab."    "; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if ($_[0] =~ /pretend/) {
@@ -1439,8 +1439,8 @@ sub update_merge_conflict{ #ARGS# ("pretend|execute")
     print "$tab"."* Merge conflict(s) found, this file will be re-scheduled for manual updating.\n";
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file5\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     print BOLD RED "$tab"."Update canceled...\n\n";
@@ -1458,10 +1458,10 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `rm -f "$file5" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
@@ -1484,10 +1484,10 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$file2" "$file1" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
@@ -1505,10 +1505,10 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_keep_complete>\n"; $tab = $tab."    "; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file2\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$file2" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$file6\" \"$file3\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$file6" "$file3" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$file6\"\n"; }
-    if ($_[0] =~ /execute/) { `rm -f "$file6" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_old\" \"$file3\"\n"; }
+    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$file3" $debug`; }
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
+    if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$file4\"\n"; }
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$file4" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
@@ -1573,7 +1573,7 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     $file5 = $merged;
     $file5 =~ s/\*/$file/;
     $file5 = $path.$file5;                          # /path/file.merge
-    $file6 = "undefined-filename";
+    $path_temp_old = "undefined-filename";
     $path_temp_new = "undefined-filename";
     if ($opt_d >= 1) {
         print "$tab"."  backup_path = $backup_path\n";
@@ -1583,7 +1583,7 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
         print "$tab"."  file3       = $file3\n";
         print "$tab"."  file4       = $file4\n";
         print "$tab"."  file5       = $file5\n";
-        print "$tab"."  file6       = $file6\n";
+        print "$tab"."  path_temp_old = $path_temp_old\n";
         print "$tab"."  path_temp_new = $path_temp_new\n";
     }
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</prepare_filenames_for_restoring>\n"; }
