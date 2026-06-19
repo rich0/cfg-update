@@ -159,7 +159,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $count;
     my $totalcount;
     my $path;
-    my $file;
+    my $cfg_basename;
     my $path_live;        # /path/file                  <-- live protected config (/etc/foo)
     my $path_new;        # /path/._cfg0000_file        <-- Portage update marker (._cfg0000_foo)
     my $path_backup_old;        # /path/._old-cfg_file        <-- backup of previous live config
@@ -710,24 +710,24 @@ sub prepare_filenames_for_updating{ #ARGS# ("file")
     if ($opt_d >= 1) { print "$tab"."<prepare_filenames_for_updating>\n"; $tab = $tab."    "; }
     $path = dirname($_[0]);
     $path = $path."/";
-    $file = basename($_[0]);
-    $file =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
-    $path_live = $path.$file;                           # /path/file                  <-- current /etc/foo
+    $cfg_basename = basename($_[0]);
+    $cfg_basename =~ s/$rm_new//;                          # strips ._cfg0000_ from filename
+    $path_live = $path.$cfg_basename;                           # /path/file                  <-- current /etc/foo
     $path_new = $_[0];                                 # /path/._cfg0000_file        <-- current /etc/._cfg0000_foo
     $path_backup_old = $backup_old;
-    $path_backup_old =~ s/\*/$file/;
+    $path_backup_old =~ s/\*/$cfg_basename/;
     $path_backup_old = $backup_path.$path.$path_backup_old;             # /backup_path/path/._old-cfg_file   <-- previous /etc/foo
     $path_backup_new = $backup_new;
-    $path_backup_new =~ s/\*/$file/;
+    $path_backup_new =~ s/\*/$cfg_basename/;
     $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file   <-- previous /etc/._cfg0000_foo
     $path_merged = $merged;
-    $path_merged =~ s/\*/$file/;
+    $path_merged =~ s/\*/$cfg_basename/;
     $path_merged = $path.$path_merged;                          # /path/file.merge            <-- merged result
     $path_temp_old = $temp_old;
-    $path_temp_old =~ s/\*/$file/;
+    $path_temp_old =~ s/\*/$cfg_basename/;
     $path_temp_old = $backup_path.$path.$path_temp_old;             # /backup_path/path/._temp_old-cfg_file
     $path_temp_new = $temp_new;
-    $path_temp_new =~ s/\*/$file/;
+    $path_temp_new =~ s/\*/$cfg_basename/;
     $path_temp_new = $backup_path.$path.$path_temp_new;             # /backup_path/path/._temp_new-cfg_file
     if ($opt_d >= 1) {
         print "$tab"."  backup_path = $backup_path\n";
@@ -1555,23 +1555,23 @@ sub prepare_filenames_for_restoring{ #ARGS# ("file")
     $path = dirname($_[0]);
     $path =~ s/$backup_path//;
     $path = $path."/";
-    $file = basename($_[0]);
-    $file =~ s/$rm_old//;                          # strips ._old-cfg_ from filename
+    $cfg_basename = basename($_[0]);
+    $cfg_basename =~ s/$rm_old//;                          # strips ._old-cfg_ from filename
     $path_live = $restore_old;
-    $path_live =~ s/\*/$file/;
+    $path_live =~ s/\*/$cfg_basename/;
     $path_live = $path.$path_live;                          # /path/file                  <-- live config to restore
     $path_new = $restore_new;
-    $path_new =~ s/\*/$file/;
+    $path_new =~ s/\*/$cfg_basename/;
     $path_new = $path.$path_new;                          # /path/._cfg0000_file        <-- ._cfg marker to restore
     if (-e $path_new) { $path_new =~ s/0000/----/; }      # or /path/._cfg----_file if a newer update exists
     $path_backup_old = $backup_old;
-    $path_backup_old =~ s/\*/$file/;
+    $path_backup_old =~ s/\*/$cfg_basename/;
     $path_backup_old = $backup_path.$path.$path_backup_old;             # /backup_path/path/._old-cfg_file
     $path_backup_new = $backup_new;
-    $path_backup_new =~ s/\*/$file/;
+    $path_backup_new =~ s/\*/$cfg_basename/;
     $path_backup_new = $backup_path.$path.$path_backup_new;             # /backup_path/path/._new-cfg_file
     $path_merged = $merged;
-    $path_merged =~ s/\*/$file/;
+    $path_merged =~ s/\*/$cfg_basename/;
     $path_merged = $path.$path_merged;                          # /path/file.merge
     $path_temp_old = "undefined-filename";
     $path_temp_new = "undefined-filename";
@@ -1715,9 +1715,9 @@ sub optimize_backups{ #RUNMODE# --optimize-backups
         $num = $i + 1;
         $path = dirname($list[$i]);
         $path = $path."/";
-        $file = basename($list[$i]);
-        $path_live = $path.$file;                           # /path/file                  <-- live protected file
-        $path_new = $backup_path.$path."._new-cfg_".$file; # /backup_path/path/._new-cfg_file
+        $cfg_basename = basename($list[$i]);
+        $path_live = $path.$cfg_basename;                           # /path/file                  <-- live protected file
+        $path_new = $backup_path.$path."._new-cfg_".$cfg_basename; # /backup_path/path/._new-cfg_file
         $path_backup_new = "";
         $path_merged = "";
         &determine_state;
