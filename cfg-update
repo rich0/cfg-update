@@ -143,7 +143,7 @@ $Term::ANSIColor::AUTORESET = 1;
     my $tool_supports_3way;
     my $tool_saves_mergefile_when_aborted;
     my $has_merge_conflict;
-    my $ancestor_found;
+    my $has_ancestor;
     my $cmd;
     my @dir;
     my @maskdir;
@@ -775,11 +775,11 @@ sub determine_state{ #DEPS# (requires that global variable $path_live contains a
     $vstate = state_label($state);
     if ($opt_d >= 1) { print "$tab"."  State of the current file : $vstate\n"; }
     if (-e $path_backup_new) {
-        $ancestor_found = "true";
+        $has_ancestor = "true";
     } else {
-        $ancestor_found = "false";
+        $has_ancestor = "false";
     }
-    if ($opt_d >= 1) { print "$tab"."  Ancestor file available   : $ancestor_found\n"; }
+    if ($opt_d >= 1) { print "$tab"."  Ancestor file available   : $has_ancestor\n"; }
     if (-f "$path_merged") {
         local $ENV{LC_ALL}="C";
         if (`grep \"\^<<<<<<< \\\|\\^\|\|\|\|\|\|\\\|\\^>>>>>>> \\\|\\^=======\$\" "$path_merged" $debug`) {
@@ -823,13 +823,13 @@ sub list_updates{ #RUNMODE# -l, --list
             if ($opt_v >= 1) { print "$tab"."Stage[1]  "; }
             print "$tab"."$vstate  $list[$i]\n";
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($has_merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($has_ancestor =~ "true") && ($has_merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
                 $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                 if ($opt_v >= 1) { print "$tab"."Stage[2]  "; }
                 print "$tab"."$vstate  $list[$i]\n";
             } else {
-                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
+                if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($has_ancestor =~ "true")) {
                     push(@stage3_queue, $list[$i]);
                     $num++; print "$tab"."$num "; if ($num < 1000) { print " "; } if ($num < 100) { print " "; } if ($num < 10)  { print " "; }
                     if ($opt_v >= 1) { print "$tab"."Stage[3]  "; }
@@ -903,7 +903,7 @@ sub schedule_automatic_updates{
         if (($enable_stage1 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_UF, STATE_UB)) {
             push(@stage1_queue, $list[$i]);
         } else {
-            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true") && ($has_merge_conflict =~ "false")) {
+            if (($enable_stage2 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($has_ancestor =~ "true") && ($has_merge_conflict =~ "false")) {
                 push(@stage2_queue, $list[$i]);
             }
         }
@@ -916,7 +916,7 @@ sub schedule_manual_updates{
     for (my $i = 0; $i < @list; ++$i) {
         &prepare_filenames_for_updating($list[$i]);
         &determine_state;
-        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($ancestor_found =~ "true")) {
+        if (($enable_stage3 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF) && ($has_ancestor =~ "true")) {
             push(@stage3_queue, $list[$i]);
         } else {
             if (($enable_stage4 =~ /^yes$|^true$|^on$/i) && (-e $path_live) && state_is($state, STATE_MF, STATE_UF, STATE_CF)) {
