@@ -348,6 +348,40 @@ assert_stage_output() {
     esac
 }
 
+install_mock_imediff() {
+    local golden_merge="${1:-}"
+    cat >"$SANDBOX/bin/imediff" <<'EOF'
+#!/bin/bash
+log="${CFG_UPDATE_TEST_SANDBOX}/mock-imediff.log"
+echo "$*" >>"$log"
+outfile=""
+use_a="no"
+files=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -a) use_a="yes"; shift ;;
+        -o) outfile="$2"; shift 2 ;;
+        *) files+=("$1"); shift ;;
+    esac
+done
+if [[ "$use_a" == "yes" ]]; then
+    echo "USE_A=yes" >>"$log"
+fi
+case "${#files[@]}" in
+    3) echo "THREE_WAY=yes" >>"$log" ;;
+    2) echo "TWO_WAY=yes" >>"$log" ;;
+esac
+if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
+    cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
+fi
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/imediff"
+    if [[ -n "$golden_merge" ]]; then
+        cp "$golden_merge" "$SANDBOX/golden.merge"
+    fi
+}
+
 install_mock_sdiff() {
     local golden_merge="${1:-}"
     cat >"$SANDBOX/bin/sdiff" <<'EOF'
@@ -746,6 +780,21 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
 
+    # Stage 3: mock imediff must receive 3-way (-a -o live ancestor new)
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    install_mock_imediff \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/imediff|" "$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update_stdin $'y\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage3 conflict mock imediff merge" 3 "$output"
+    assert_file_contains "stage3 mock imediff used -a" \
+        "$SANDBOX/mock-imediff.log" "USE_A=yes"
+    assert_file_contains "stage3 mock imediff used 3-way merge" \
+        "$SANDBOX/mock-imediff.log" "THREE_WAY=yes"
+    assert_file_equals "stage3 mock imediff merge matches golden" \
+        "$SANDBOX/etc/test/test_auto_3way_conflict" \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+
     # Stage 4: mock sdiff must run 2-way merge (no -b ancestor)
     setup_sandbox stage4-manual-2way stage4_only
     install_mock_sdiff "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
@@ -759,6 +808,29 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/test_manual_2way" \
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
     assert_missing "stage4 mock merge removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+
+    # Stage 4: mock imediff must run 2-way merge (-a -o live new)
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_imediff "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/imediff|" "$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update_stdin $'y\n1\ny\n1\n' -u 2>&1)" || true
+    assert_output_matches "stage4 imediff merge: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 imediff merge: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 imediff merge: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 imediff merge: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_contains "stage4 mock imediff used -a" \
+        "$SANDBOX/mock-imediff.log" "USE_A=yes"
+    assert_file_contains "stage4 mock imediff used 2-way merge" \
+        "$SANDBOX/mock-imediff.log" "TWO_WAY=yes"
+    assert_file_equals "stage4 mock imediff merge matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 mock imediff merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
 
     # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)

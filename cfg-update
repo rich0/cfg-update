@@ -558,7 +558,7 @@ sub check_tool{
         if ($opt_d >= 1) { print "$tab"."merge_tool_name                   = $merge_tool_name\n"; }
     }
 # Check if tool can handle manual 2-way merges...
-    if ($merge_tool =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/sdiff$|^sdiff$|\/imediff2?$|^imediff2?$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/vimdiff$|^vimdiff$|\/gvimdiff$|^gvimdiff$/) {
+    if ($merge_tool =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/sdiff$|^sdiff$|\/imediff$|^imediff$|\/meld$|^meld$|\/kompare$|^kompare$|\/tkdiff$|^tkdiff$|\/vimdiff$|^vimdiff$|\/gvimdiff$|^gvimdiff$/) {
         $tool_supports_2way = "yes";
         if ($opt_d >= 1) { print "$tab"."tool_supports_2way                = $tool_supports_2way\n"; }
     } else {
@@ -578,7 +578,7 @@ sub check_tool{
         if ($opt_d >= 1) { print "$tab"."stage3 disabled...\n"; }
     }
 # Check if tool saves .merge file when aborted...
-    if ($merge_tool_name =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/imediff2?$|^imediff2?$|\/meld$|^meld$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
+    if ($merge_tool_name =~ /\/kdiff3$|^kdiff3$|\/xxdiff$|^xxdiff$|\/imediff$|^imediff$|\/meld$|^meld$|\/tkdiff$|^tkdiff$|\/gtkdiff$|^gtkdiff$/) {
         $tool_saves_mergefile_when_aborted = "yes";
         if ($opt_d >= 1) { print "$tab"."tool_saves_mergefile_when_aborted = $tool_saves_mergefile_when_aborted\n"; }
     } else {
@@ -614,7 +614,7 @@ sub launch_tool{ #ARGS# ("pretend|execute","mergetool")
     if  ($_[1] =~ /\/gvimdiff$|^gvimdiff$/ )                                 { $cmd = "$_[1] -c 'saveas $path_live' -c next -c 'setlocal nomodifiable readonly' -c prev $path_live $path_new --nofork 2>\&1>/dev/null"; }
     if  ($_[1] =~ /\/gtkdiff$|^gtkdiff$/   )                                 { $cmd = "$_[1] -o $path_merged $path_live $path_new $debug"; }
     if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "yes")) { $cmd = "$_[1] -a -o $path_merged $path_live $path_backup_new $path_new"; }
-    if (($_[1] =~ /\/imediff2?$|^imediff2?$/ ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] -a -o $path_merged $path_live $path_new"; }
+    if (($_[1] =~ /\/imediff$|^imediff$/   ) && ($threeway_update =~ "no" )) { $cmd = "$_[1] -a -o $path_merged $path_live $path_new"; }
     if  ($_[1] =~ /\/sdiff$|^sdiff$/       )                                 { $cmd = "$_[1] -w $screenwidth -d -o $path_merged $path_live $path_new"; }
     if  ($_[1] =~ /\/diff3$|^diff3$/       )                                 { $cmd = "$_[1] -m $path_new $path_backup_new $path_live > $path_merged $debug"; } # by specifying $path_live as the third file, the current settings will will be placed lower in the merged file. this may prevent trouble in case of unsolved merge conflicts...
     if  ($_[1] =~ /\/diff$|^diff$/         )                                 { $cmd = "$_[1] -W $screenwidth $path_live $path_new $debug"; } # viewing only...
@@ -1945,7 +1945,7 @@ sub print_usage{ #RUNMODE# -?, --help (or when no arguments or when unusable arg
         print "$tab"."  -t [tool], --tool [tool]\n";
         print "$tab"."          Set mergetool, overrides the default setting in $settings\n";
         print "$tab"."          GUI tools: meld, kdiff3, xxdiff, tkdiff, gtkdiff, gvimdiff\n";
-        print "$tab"."          CLI tools: vimdiff, sdiff, imediff2, imediff\n";
+        print "$tab"."          CLI tools: vimdiff, sdiff, imediff\n";
         print "$tab"."\n";
         print "$tab"."  -p, --pretend\n";
         print "$tab"."          Pretend, simulate the update session without changing anything\n";

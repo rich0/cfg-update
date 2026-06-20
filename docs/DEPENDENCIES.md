@@ -61,8 +61,7 @@ Pick one tool with the capabilities you need:
 | kdiff3 | 2-way + 3-way | Yes | `dev-util/kdiff3` | KDE; solid 3-way |
 | xxdiff | 2-way + 3-way | Yes | — | KDE/Qt; solid 3-way; not in portage (~2011); install manually |
 | tkdiff | 2-way + 3-way | Yes | varies | Rare; Tcl/Tk GUI |
-| imediff2 | 2-way | No | varies | CLI; good for headless |
-| imediff | 2-way + 3-way | No | varies | CLI 3-way (2025 fork patch) |
+| imediff | 2-way + 3-way | No | `dev-util/imediff` | CLI; good for headless (use 3.4.x+) |
 | sdiff | 2-way | No | `sys-apps/diffutils` | Fallback if configured tool missing |
 | vimdiff | 2-way | No | `app-editors/vim` | CLI; no X required |
 | gvimdiff | 2-way | Yes | `app-editors/vim` | GUI variant of vimdiff; requires X |
