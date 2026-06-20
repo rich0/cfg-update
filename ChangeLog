@@ -2,6 +2,14 @@
 # Copyright 2002-2005 Gentoo Technologies, Inc.; Distributed under the GPL v2
 # $Header: $
 
+*cfg-update-1.10.4 (2026-06-20)
+
+  Drop gtkdiff and imediff2 merge-tool support; align merge-tool lists in
+  help, cfg-update.conf, DEPENDENCIES.md, and ebuild postinst (issues #53,
+  #58, #59). Fix cfg-update $version to match README and ebuild PV.
+  Maintainer: add GitHub Actions CI, release scripts, and expanded tests
+  (issues #39, #46, #47).
+
 *cfg-update-1.10.3 (18 JUN 2026)
 
   Align merge tool defaults with cfg-update.conf (meld); list meld as the
