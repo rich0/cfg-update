@@ -67,7 +67,7 @@ Tier B/C/D/E/F pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, an
 
 ### Golden `expected/` files
 
-Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses a mock `kdiff3` to verify 3-way merge invocation. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
+Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses mock `kdiff3`, `sdiff`, and `imediff` binaries to verify merge-tool command invocations. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
 
 The harness prepends a mock `portageq` to `PATH` that returns two sandbox directories as `CONFIG_PROTECT`: `etc/test` and `etc/test2` (the latter may be empty in most scenarios). Tier A `multi CONFIG_PROTECT` deploys stage-1 fixtures into both dirs and asserts `-lv` and `-b` see files from each protected path. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 

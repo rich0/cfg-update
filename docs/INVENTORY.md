@@ -194,7 +194,7 @@ pre_pkg_setup() {
 | kdiff3 | yes | yes | yes | Optional |
 | xxdiff | yes | yes | yes | **Removed** from portage ~2011; still supported if installed |
 | tkdiff | yes | yes | yes | Rare |
-| imediff / imediff2 | yes | yes/no | no | Optional CLI |
+| imediff | yes | yes | no | Optional CLI (`dev-util/imediff`) |
 | sdiff | yes | no | no | **Core** — always available |
 | vimdiff / gvimdiff | yes | no | mixed | Optional |
 | kompare | yes | no | yes | KDE; rare |

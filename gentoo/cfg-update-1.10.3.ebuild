@@ -75,7 +75,7 @@ pkg_postinst() {
 	einfo "in /etc/cfg-update.conf before using cfg-update:"
 	echo
 	einfo "If your system does not have an X-server installed you need to"
-	einfo "change the MERGE_TOOL to sdiff, imediff, imediff2, or vimdiff."
+	einfo "change the MERGE_TOOL to sdiff, imediff, or vimdiff."
 	einfo "If you have X installed, set MERGE_TOOL to your favorite GUI tool:"
 	einfo "meld (default), kdiff3, xxdiff, gvimdiff, tkdiff, kompare"
 	echo
