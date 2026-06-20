@@ -197,7 +197,6 @@ pre_pkg_setup() {
 | imediff | yes | yes | no | Optional CLI (`dev-util/imediff`) |
 | sdiff | yes | no | no | **Core** — always available |
 | vimdiff / gvimdiff | yes | no | mixed | Optional |
-| gtkdiff | yes | no | yes | Optional |
 | kompare | yes | no | yes | KDE; rare |
 | diff3 | auto | — | no | **Core** (stage 2 internal) |
 
