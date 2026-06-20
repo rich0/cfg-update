@@ -41,7 +41,7 @@ After running the script, **manually edit** the ChangeLog entry with a good summ
 5. Merge the PR.
 6. On `master`: tag (`git tag -a 1.11.0 -m "cfg-update 1.11.0"`), push the tag (`git push origin 1.11.0`).
 7. (Optional) Create a GitHub Release from the tag.
-8. (Optional) Merge `master` back into `develop` if versions diverged.
+8. Open **PR: `master` → `develop`** to bring the version bump and ChangeLog into `develop`. Required after every release — `develop` will not have the new version until this step.
 
 ## Branch protection (rulesets)
 
@@ -69,10 +69,4 @@ Configure at **Settings → Rules → Rulesets → New branch ruleset**. Use rul
 | Require status checks to pass | Yes — same `integration` check |
 | Require branches to be up to date before merging | Yes |
 
-**Default branch:** set to `develop` in **Settings → General** if still `master`.
-
-### What “up to date before merging” means
-
-This does not require rebasing on every push. It only blocks the **Merge** button when the PR branch is behind its base branch. Use **Update branch** on the PR, `git merge develop`, or `git rebase develop`, then wait for CI to pass on the updated head commit.
-
-See [AGENTS.md](AGENTS.md) for the full contributor + branch model.
+**Default branch:** keep `master` so the repo homepage reflects the latest release. PRs from contributors target `develop` by convention (see [AGENTS.md](AGENTS.md)).
