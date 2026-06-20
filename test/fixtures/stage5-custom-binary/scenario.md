@@ -16,7 +16,7 @@ A user-placed binary at a path Portage now manages. Not in the checksum index (s
 
 ## Index entry
 
-None. Omitted in the original `prepare_cfg-update_test` script.
+None — user-placed binary, not tracked in the checksum index.
 
 ## Expected behavior
 

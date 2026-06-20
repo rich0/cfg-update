@@ -31,10 +31,6 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 | [`stage5-link-to-file`](fixtures/stage5-link-to-file/) | FL | 5 | Live symlink → new regular file |
 | [`stage5-link-to-link`](fixtures/stage5-link-to-link/) | LL | 5 | Symlink target changes |
 
-## Legacy
-
-[`fixtures/legacy/prepare_cfg-update_test`](fixtures/legacy/prepare_cfg-update_test) is the original Gentoo-host setup script. It writes to real `/etc` and `/var/lib` paths. Prefer the per-scenario layout for future harness work.
-
 ## Running tests
 
 Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` (no writes to `/etc`).

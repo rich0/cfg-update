@@ -16,7 +16,7 @@ The live file was never installed by Portage — it was created by an applicatio
 
 ## Index entry
 
-None. The original `prepare_cfg-update_test` script deliberately omitted this path (commented out).
+None — user-created file, not tracked in the checksum index.
 
 ## Expected behavior
 
