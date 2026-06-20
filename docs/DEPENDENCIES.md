@@ -122,10 +122,10 @@ Run from a git checkout (no root required):
 ./test/run-tests.sh
 ```
 
-Gentoo ebuild ([`gentoo/cfg-update-1.10.3.ebuild`](../gentoo/cfg-update-1.10.3.ebuild)):
+Gentoo ebuild ([`gentoo/cfg-update-1.10.4.ebuild`](../gentoo/cfg-update-1.10.4.ebuild)):
 
 ```bash
-FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.3.ebuild
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.4.ebuild
 ```
 
 | Requirement | Gentoo package | Used in |
@@ -161,7 +161,7 @@ grep -q 'cfg-update --index' /etc/portage/bashrc && echo "hook OK"
 A reference ebuild is maintained in [`gentoo/`](../gentoo/). Install with:
 
 ```bash
-FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.3.ebuild
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.4.ebuild
 ```
 
 Or from the Gentoo tree: `emerge app-portage/cfg-update`.
