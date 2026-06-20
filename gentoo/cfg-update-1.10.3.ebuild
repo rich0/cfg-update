@@ -61,7 +61,7 @@ src_test() {
 src_install() {
 	dobin cfg-update
 	insinto /usr/lib/cfg-update
-	doins cfg-update cfg-update_indexing test.tgz
+	doins cfg-update cfg-update_indexing
 	dodoc ChangeLog
 	doman *.8
 	insinto /etc

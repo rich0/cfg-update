@@ -1,8 +1,8 @@
 # cfg-update test fixtures
 
-Synthetic Portage config-update scenarios extracted from the legacy [`test.tgz`](../test.tgz) archive. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
+Synthetic Portage config-update scenarios for integration testing. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
 
-The original archive kept every file in a flat `test/` directory. The layout here mirrors how a harness will deploy files:
+The layout mirrors how the harness deploys files into an isolated sandbox:
 
 | Path within a scenario | Deployed to (sandbox) |
 |------------------------|------------------------|
@@ -30,10 +30,6 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 | [`stage5-file-to-link`](fixtures/stage5-file-to-link/) | LF | 5 | Live file → new symlink |
 | [`stage5-link-to-file`](fixtures/stage5-link-to-file/) | FL | 5 | Live symlink → new regular file |
 | [`stage5-link-to-link`](fixtures/stage5-link-to-link/) | LL | 5 | Symlink target changes |
-
-## Legacy
-
-[`fixtures/legacy/prepare_cfg-update_test`](fixtures/legacy/prepare_cfg-update_test) is the original Gentoo-host setup script. It writes to real `/etc` and `/var/lib` paths. Prefer the per-scenario layout for future harness work.
 
 ## Running tests
 
