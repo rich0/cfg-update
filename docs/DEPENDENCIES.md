@@ -59,6 +59,7 @@ Pick one tool with the capabilities you need:
 |------|--------|:---:|----------------|-------|
 | **meld** | 2-way + 3-way | Yes | `dev-util/meld` | **Default** in `cfg-update.conf` |
 | kdiff3 | 2-way + 3-way | Yes | `dev-util/kdiff3` | KDE; solid 3-way |
+| xxdiff | 2-way + 3-way | Yes | — | KDE/Qt; solid 3-way; not in portage (~2011); install manually |
 | imediff2 | 2-way | No | varies | CLI; good for headless |
 | imediff | 2-way + 3-way | No | varies | CLI 3-way (2025 fork patch) |
 | sdiff | 2-way | No | `sys-apps/diffutils` | Fallback if configured tool missing |
