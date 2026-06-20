@@ -24,5 +24,8 @@ jobs:
       - name: Perl syntax check
         run: perl -c cfg-update
 
+      - name: Check version consistency
+        run: ./scripts/check-version.sh
+
       - name: Run integration tests
         run: ./test/run-tests.sh --full
