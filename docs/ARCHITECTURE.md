@@ -188,8 +188,8 @@ Interactive prompts for binaries, symlinks, and custom files.
 
 Builds tool-specific command lines. Tool capabilities are detected in `check_tool`:
 
-- **2-way:** kdiff3, xxdiff, sdiff, imediff2, meld, vimdiff, …
-- **3-way:** xxdiff, kdiff3, meld, tkdiff, imediff
+- **2-way:** meld, kdiff3, xxdiff, tkdiff, imediff, imediff2, sdiff, vimdiff, gvimdiff, kompare
+- **3-way:** meld, kdiff3, xxdiff, tkdiff, imediff
 - **GUI check:** `check_gui` runs only when `launch_tool` is about to execute a GUI-capable tool (not for `diff3`/`diff` in automatic stages)
 
 ## Backup system

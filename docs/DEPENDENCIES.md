@@ -60,10 +60,13 @@ Pick one tool with the capabilities you need:
 | **meld** | 2-way + 3-way | Yes | `dev-util/meld` | **Default** in `cfg-update.conf` |
 | kdiff3 | 2-way + 3-way | Yes | `dev-util/kdiff3` | KDE; solid 3-way |
 | xxdiff | 2-way + 3-way | Yes | — | KDE/Qt; solid 3-way; not in portage (~2011); install manually |
+| tkdiff | 2-way + 3-way | Yes | varies | Rare; Tcl/Tk GUI |
 | imediff2 | 2-way | No | varies | CLI; good for headless |
 | imediff | 2-way + 3-way | No | varies | CLI 3-way (2025 fork patch) |
 | sdiff | 2-way | No | `sys-apps/diffutils` | Fallback if configured tool missing |
-| vimdiff | 2-way | Optional | `app-editors/vim` | No X required |
+| vimdiff | 2-way | No | `app-editors/vim` | CLI; no X required |
+| gvimdiff | 2-way | Yes | `app-editors/vim` | GUI variant of vimdiff; requires X |
+| kompare | 2-way | Yes | `kde-apps/kompare` | KDE; 2-way only |
 
 Set in `/etc/cfg-update.conf`:
 
