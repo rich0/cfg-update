@@ -77,7 +77,7 @@ pkg_postinst() {
 	einfo "If your system does not have an X-server installed you need to"
 	einfo "change the MERGE_TOOL to sdiff, imediff, imediff2, or vimdiff."
 	einfo "If you have X installed, set MERGE_TOOL to your favorite GUI tool:"
-	einfo "meld (default), kdiff3, xxdiff, gtkdiff, gvimdiff, tkdiff, kompare"
+	einfo "meld (default), kdiff3, xxdiff, gvimdiff, tkdiff, kompare"
 	echo
 	einfo "TIP: to maximize the chances of future automatic updates, run:"
 	einfo "cfg-update --optimize-backups"
