@@ -18,6 +18,8 @@ usage() {
 
 die() { echo "Error: $*" >&2; exit 1; }
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 if [[ -z "$NEW_VERSION" ]]; then
     usage
     exit 1
@@ -102,32 +104,7 @@ fi
 } > ChangeLog.tmp && mv ChangeLog.tmp ChangeLog
 
 # 5. Post-bump consistency check
-CFG_VERSION=$(perl -ne 'print $1 if /^    my \$version\s+=\s+"([^"]+)"/' cfg-update)
-README_VERSION=$(perl -ne 'print $1 if /^\*\*Version:\*\* (.+)/' README.md)
-
-MISMATCH=0
-if [[ "$CFG_VERSION" != "$NEW_VERSION" ]]; then
-    echo "Mismatch: cfg-update has \$version = \"$CFG_VERSION\" (expected $NEW_VERSION)" >&2
-    MISMATCH=1
-fi
-if [[ "$README_VERSION" != "$NEW_VERSION" ]]; then
-    echo "Mismatch: README.md has **Version:** $README_VERSION (expected $NEW_VERSION)" >&2
-    MISMATCH=1
-fi
-if [[ -n "$OLD_EBUILD" || -e "$NEW_EBUILD" ]]; then
-    if [[ ! -e "$NEW_EBUILD" ]]; then
-        echo "Mismatch: ebuild $NEW_EBUILD not found after bump" >&2
-        MISMATCH=1
-    fi
-else
-    echo "Warning: no ebuild in gentoo/ — skipped ebuild PV check" >&2
-fi
-
-if (( MISMATCH )); then
-    die "Post-bump version check failed; fix the files above before committing"
-fi
-
-echo "Version check passed: cfg-update, README.md, and ebuild all at $NEW_VERSION"
+"$SCRIPT_DIR/check-version.sh" "$NEW_VERSION"
 
 echo
 echo "Bump complete. Next manual steps:"
@@ -136,6 +113,6 @@ echo "  2. git add cfg-update README.md ChangeLog"
 if [[ -n "$OLD_EBUILD" || -e "$NEW_EBUILD" ]]; then
     echo "     git add -A gentoo/"
 fi
-echo "  3. git commit -m 'Release $NEW_VERSION'"
-echo "  4. git tag -a $NEW_VERSION -m 'cfg-update $NEW_VERSION'"
-echo "  5. git push origin master $NEW_VERSION"
+echo "  3. Open a PR to master (see VERSIONING.md)"
+echo "  4. After merge: git tag -a $NEW_VERSION -m 'cfg-update $NEW_VERSION'"
+echo "  5. git push origin $NEW_VERSION"
