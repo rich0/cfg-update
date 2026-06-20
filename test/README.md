@@ -1,8 +1,8 @@
 # cfg-update test fixtures
 
-Synthetic Portage config-update scenarios extracted from the legacy [`test.tgz`](../test.tgz) archive. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
+Synthetic Portage config-update scenarios for integration testing. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
 
-The original archive kept every file in a flat `test/` directory. The layout here mirrors how a harness will deploy files:
+The layout mirrors how the harness deploys files into an isolated sandbox:
 
 | Path within a scenario | Deployed to (sandbox) |
 |------------------------|------------------------|

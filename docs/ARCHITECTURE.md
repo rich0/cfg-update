@@ -1,10 +1,10 @@
 # cfg-update Architecture
 
-This document describes how `cfg-update` works internally. For a file-by-file inventory and cleanup plan, see [INVENTORY.md](INVENTORY.md).
+This document describes how `cfg-update` works internally. For a file-by-file inventory, see [INVENTORY.md](INVENTORY.md).
 
 ## Overview
 
-`cfg-update` is a single Perl script (~2,500 lines, 53 subroutines) that:
+`cfg-update` is a single Perl script (~2,100 lines, 47 subroutines) that:
 
 1. Maintains a **checksum index** of files in `CONFIG_PROTECT` directories
 2. Scans for Portage config update markers (`._cfg????_*`)
@@ -230,6 +230,7 @@ These enable stage 2's 3-way merges on subsequent updates.
 | `cfg-update.conf` | `/etc/cfg-update.conf` |
 | `cfg-update.8` | `/usr/share/man/man8/cfg-update.8` |
 | `cfg-update_indexing` | `/usr/lib/cfg-update/cfg-update_indexing` |
+| `gentoo/cfg-update-*.ebuild` | (not installed; reference for overlays) |
 
 ## Testing
 

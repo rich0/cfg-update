@@ -101,7 +101,7 @@ This project has no machine-readable dependency manifest today. Automated update
 |-----------|--------|--------|
 | GitHub Actions | Deferred (after CI) | `renovate.json` with `github-actions` manager |
 | CPAN / Perl | Optional future | Add `cpanfile` to enable Renovate `cpan` manager |
-| Gentoo packages | Manual | Track versions here; revisit when ebuild is restored |
+| Gentoo packages | Manual | Track versions here; reference ebuild in [`gentoo/`](../gentoo/) |
 | System binaries | Manual | No lockfile possible |
 
 ### Suggested `cpanfile` (future)
@@ -119,10 +119,10 @@ Run from a git checkout (no root required):
 ./test/run-tests.sh
 ```
 
-Gentoo ebuild (`gentoo/cfg-update-1.9.1-r2.ebuild`):
+Gentoo ebuild ([`gentoo/cfg-update-1.10.3.ebuild`](../gentoo/cfg-update-1.10.3.ebuild)):
 
 ```bash
-FEATURES=test USE=test emerge --oneshot /path/to/cfg-update-1.9.1-r2.ebuild
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.3.ebuild
 ```
 
 | Requirement | Gentoo package | Used in |
@@ -153,6 +153,14 @@ which diff3 md5sum xargs grep
 grep -q 'cfg-update --index' /etc/portage/bashrc && echo "hook OK"
 ```
 
-## Historical note
+## Gentoo ebuild
 
-The original Gentoo ebuild (`app-portage/cfg-update`) selected merge tools based on USE flags (`-qt -kde` for meld-only systems). This repository does not include an ebuild; install dependencies manually or via your overlay.
+A reference ebuild is maintained in [`gentoo/`](../gentoo/). Install with:
+
+```bash
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.3.ebuild
+```
+
+Or from the Gentoo tree: `emerge app-portage/cfg-update`.
+
+The original upstream ebuild selected merge tools based on USE flags (`-qt -kde` for meld-only systems). The in-repo ebuild uses `IUSE="test X"` and documents `meld` as the default in `pkg_postinst`.
