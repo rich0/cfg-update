@@ -1,0 +1,31 @@
+name: Tests
+
+on:
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            diffutils \
+            libterm-readkey-perl \
+            shellcheck
+
+      - name: Perl syntax check
+        run: perl -c cfg-update
+
+      - name: Check version consistency
+        run: ./scripts/check-version.sh
+
+      - name: Run integration tests
+        run: ./test/run-tests.sh --full

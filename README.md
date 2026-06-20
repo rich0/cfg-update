@@ -8,7 +8,7 @@ Feedback is welcome.
 
 A safe, staged alternative to Gentoo's `etc-update` for handling configuration file updates after package merges.
 
-**Version:** 1.10.3
+**Version:** 1.10.4
 **License:** GPL-2 ([COPYING](COPYING))
 
 ## Description

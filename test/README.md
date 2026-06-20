@@ -1,8 +1,8 @@
 # cfg-update test fixtures
 
-Synthetic Portage config-update scenarios extracted from the legacy [`test.tgz`](../test.tgz) archive. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
+Synthetic Portage config-update scenarios for integration testing. Each scenario lives in its own subdirectory under [`fixtures/`](fixtures/) so intent, files, and expected behavior stay together.
 
-The original archive kept every file in a flat `test/` directory. The layout here mirrors how a harness will deploy files:
+The layout mirrors how the harness deploys files into an isolated sandbox:
 
 | Path within a scenario | Deployed to (sandbox) |
 |------------------------|------------------------|
@@ -31,10 +31,6 @@ Combine all scenarios with [`fixtures/checksum.index.seed`](fixtures/checksum.in
 | [`stage5-link-to-file`](fixtures/stage5-link-to-file/) | FL | 5 | Live symlink → new regular file |
 | [`stage5-link-to-link`](fixtures/stage5-link-to-link/) | LL | 5 | Symlink target changes |
 
-## Legacy
-
-[`fixtures/legacy/prepare_cfg-update_test`](fixtures/legacy/prepare_cfg-update_test) is the original Gentoo-host setup script. It writes to real `/etc` and `/var/lib` paths. Prefer the per-scenario layout for future harness work.
-
 ## Running tests
 
 Integration harness: [`run-tests.sh`](run-tests.sh). Uses a temp sandbox, mock `portageq`, and `CFG_UPDATE_CONF` (no writes to `/etc`).
@@ -57,7 +53,10 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | Tier | What | Checks |
 |------|------|--------|
 | 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
-| A | `-lv` | Combined + per-scenario classify (12 markers), missing-index case, removed-flag regression (`-s`, `--move-backups`, ad-hoc diff), multi `CONFIG_PROTECT` dirs, ancestor backups on disk |
+| A1 | `-lv` combined | All 12 markers in one sandbox; validates `checksum.index.seed` integration |
+| A2 | `-lv` canaries | Per-scenario classify for four edge cases: sole marker, MF conflict, dual `._cfg*`, LL symlink |
+| A3 | edge cases | Missing index (`stage0-no-index`), multi `CONFIG_PROTECT` dirs |
+| A4 | removed flags | Regression for removed options: `-s`, `--move-backups`, ad-hoc diff, `--mount`, `-h1` |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
@@ -68,7 +67,7 @@ Tier B/C/D/E/F pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, an
 
 ### Golden `expected/` files
 
-Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses a mock `kdiff3` to verify 3-way merge invocation. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
+Scenarios exercised in Tier C/D include an `expected/` subdirectory with post-update reference files. Tier C compares live files with `cmp`. Tier D isolates a single manual stage per scenario (`stage3_only`, `stage4_only`, `stage5_only`), asserts stage-specific stdout (e.g. `manual 3-way merging` vs `manual updating`), and uses mock `kdiff3`, `sdiff`, and `imediff` binaries to verify merge-tool command invocations. Keys are piped to STDIN (sandbox `readkey` reads lines when stdin is not a TTY).
 
 The harness prepends a mock `portageq` to `PATH` that returns two sandbox directories as `CONFIG_PROTECT`: `etc/test` and `etc/test2` (the latter may be empty in most scenarios). Tier A `multi CONFIG_PROTECT` deploys stage-1 fixtures into both dirs and asserts `-lv` and `-b` see files from each protected path. Ancestor backups are placed at `BACKUP_PATH` + full dirname of each marker (e.g. `{sandbox}/var/lib/cfg-update/backups{sandbox}/etc/test/`), matching cfg-update's internal path logic.
 

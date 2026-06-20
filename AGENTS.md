@@ -8,13 +8,13 @@ config files post-`emerge`. It uses a five-stage pipeline (auto-overwrite → di
 
 - **Primary target:** single-host Gentoo + Portage
 - **Paludis:** best-effort only (do not break Portage compatibility)
-- **Default branch:** `master` (integration only — never push directly unless maintainer-approved)
+- **Default branch for development:** `develop` (PRs target `develop`; `master` is release-only)
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design and [docs/INVENTORY.md](docs/INVENTORY.md)
 for cleanup roadmap + feature retention matrix.
 
 ## Branch workflow
-All work on **topic branches** → PR to `master`.
+All work on **topic branches** → PR to `develop`.
 
 | Prefix     | Use when |
 |------------|----------|
@@ -24,12 +24,11 @@ All work on **topic branches** → PR to `master`.
 
 - One logical change per branch/PR
 - Reference issues: `(issue #N)`
-- Branch from current `master`
+- Branch from current `develop`
 - Create PR after commit
 - Plans always evaluate functional test coverage
 - Tests prioritize verification of files over console output
-- Check git tag and bump version if current version is tagged on any change (see VERSIONING.md)
-- After version bump update changelog with concise summary
+- Version bumps happen only during release preparation (see VERSIONING.md)
 
 ## Prohibitions
 - Do not create git tags (maintainer-only)

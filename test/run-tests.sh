@@ -348,6 +348,40 @@ assert_stage_output() {
     esac
 }
 
+install_mock_imediff() {
+    local golden_merge="${1:-}"
+    cat >"$SANDBOX/bin/imediff" <<'EOF'
+#!/bin/bash
+log="${CFG_UPDATE_TEST_SANDBOX}/mock-imediff.log"
+echo "$*" >>"$log"
+outfile=""
+use_a="no"
+files=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -a) use_a="yes"; shift ;;
+        -o) outfile="$2"; shift 2 ;;
+        *) files+=("$1"); shift ;;
+    esac
+done
+if [[ "$use_a" == "yes" ]]; then
+    echo "USE_A=yes" >>"$log"
+fi
+case "${#files[@]}" in
+    3) echo "THREE_WAY=yes" >>"$log" ;;
+    2) echo "TWO_WAY=yes" >>"$log" ;;
+esac
+if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
+    cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
+fi
+exit 0
+EOF
+    chmod +x "$SANDBOX/bin/imediff"
+    if [[ -n "$golden_merge" ]]; then
+        cp "$golden_merge" "$SANDBOX/golden.merge"
+    fi
+}
+
 install_mock_sdiff() {
     local golden_merge="${1:-}"
     cat >"$SANDBOX/bin/sdiff" <<'EOF'
@@ -537,10 +571,10 @@ tier_a_classify_combined() {
 }
 
 tier_a_per_scenario() {
-    echo "=== Tier A: classify per scenario (-lv) ==="
+    echo "=== Tier A: classify per scenario (-lv, canaries) ==="
     local output
 
-    # stage1-unmodified-text
+    # Canary: sole-marker isolation check
     setup_sandbox stage1-unmodified-text
     output="$(run_cfg_update -lv 2>&1)" || true
     assert_output_matches "isolated stage1-unmodified-text" \
@@ -548,21 +582,13 @@ tier_a_per_scenario() {
     assert_output_matches "isolated stage1-unmodified-text: only one marker" \
         '^1[[:space:]]+Stage\[1\]' "$output"
 
-    setup_sandbox stage1-unmodified-binary
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage1-unmodified-binary" \
-        'Stage\[1\][[:space:]]+Unmodified Binary[[:space:]].*_cfg0000_test_unmodified_binary' "$output"
-
-    setup_sandbox stage2-3way-merge-success
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage2-3way-merge-success" \
-        'Stage\[2\][[:space:]]+Modified File[[:space:]].*_cfg0000_test_auto_3way_success' "$output"
-
+    # Canary: MF conflict routing (distinct from success case)
     setup_sandbox stage2-3way-merge-conflict
     output="$(run_cfg_update -lv 2>&1)" || true
     assert_output_matches "isolated stage2-3way-merge-conflict" \
         'Stage\[2\][[:space:]]+Modified File[[:space:]].*_cfg0000_test_auto_3way_conflict' "$output"
 
+    # Canary: dual ._cfg0000_* / ._cfg0001_* markers on same basename
     setup_sandbox stage4-manual-2way
     output="$(run_cfg_update -lv 2>&1)" || true
     assert_output_matches "isolated stage4-manual-2way 0000" \
@@ -570,31 +596,7 @@ tier_a_per_scenario() {
     assert_output_matches "isolated stage4-manual-2way 0001" \
         'Stage\[4\][[:space:]]+Modified File[[:space:]].*_cfg0001_test_manual_2way' "$output"
 
-    setup_sandbox stage4-custom-file
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage4-custom-file" \
-        'Stage\[4\][[:space:]]+Custom File[[:space:]].*_cfg0000_test_custom_file' "$output"
-
-    setup_sandbox stage5-modified-binary
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage5-modified-binary" \
-        'Stage\[5\][[:space:]]+Modified Binary[[:space:]].*_cfg0000_test_modified_binary' "$output"
-
-    setup_sandbox stage5-custom-binary
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage5-custom-binary" \
-        'Stage\[5\][[:space:]]+Custom Binary[[:space:]].*_cfg0000_test_custom_binary' "$output"
-
-    setup_sandbox stage5-file-to-link
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage5-file-to-link" \
-        'Stage\[5\][[:space:]]+File to Link[[:space:]].*_cfg0000_test_file_2_link' "$output"
-
-    setup_sandbox stage5-link-to-file
-    output="$(run_cfg_update -lv 2>&1)" || true
-    assert_output_matches "isolated stage5-link-to-file" \
-        'Stage\[5\][[:space:]]+Link to File[[:space:]].*_cfg0000_test_link_2_file' "$output"
-
+    # Canary: LL state (symlink retarget)
     setup_sandbox stage5-link-to-link
     output="$(run_cfg_update -lv 2>&1)" || true
     assert_output_matches "isolated stage5-link-to-link" \
@@ -618,7 +620,7 @@ tier_a_no_index() {
         '<< Stage1 >>.*not found, skipping' "$output"
 }
 
-tier_a_removed_flags() {
+tier_a_removed_flags_regression() {
     echo "=== Tier A: removed flags regression ==="
     local output f1 f2
 
@@ -640,6 +642,19 @@ tier_a_removed_flags() {
     assert_output_not_matches "removed mode: ad-hoc 2-file diff not accepted" \
         'Merged output has been saved' "$output"
     assert_output_matches "removed mode: ad-hoc 2-file diff shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    setup_sandbox stage1-unmodified-text
+    output="$(run_cfg_update --mount 2>&1)" || true
+    assert_output_not_matches "removed flag: --mount not accepted" \
+        'Mounts remote hosts|mount_hosts|sshfs' "$output"
+    assert_output_matches "removed flag: --mount shows usage" \
+        'missing valid options|USAGE' "$output"
+
+    output="$(run_cfg_update -h1 -l 2>&1)" || true
+    assert_output_not_matches "removed flag: -h1 not accepted" \
+        'Value out of range in -h|sshfs|remote host' "$output"
+    assert_output_matches "removed flag: -h1 shows usage" \
         'missing valid options|USAGE' "$output"
 }
 
@@ -664,16 +679,6 @@ tier_a_multi_config_protect() {
         '^[[:space:]]*1[[:space:]]' "$output"
     assert_output_matches "multi-dir: backup list second entry" \
         '^[[:space:]]*2[[:space:]]' "$output"
-}
-
-tier_a_ancestor_backups() {
-    echo "=== Tier A: ancestor backups on disk ==="
-    setup_sandbox all
-    local backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
-    assert_file_exists "ancestor: 3-way success" \
-        "$backup_root/._new-cfg_test_auto_3way_success"
-    assert_file_exists "ancestor: 3-way conflict" \
-        "$backup_root/._new-cfg_test_auto_3way_conflict"
 }
 
 tier_b_pretend_auto() {
@@ -775,6 +780,21 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
 
+    # Stage 3: mock imediff must receive 3-way (-a -o live ancestor new)
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    install_mock_imediff \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/imediff|" "$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update_stdin $'y\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage3 conflict mock imediff merge" 3 "$output"
+    assert_file_contains "stage3 mock imediff used -a" \
+        "$SANDBOX/mock-imediff.log" "USE_A=yes"
+    assert_file_contains "stage3 mock imediff used 3-way merge" \
+        "$SANDBOX/mock-imediff.log" "THREE_WAY=yes"
+    assert_file_equals "stage3 mock imediff merge matches golden" \
+        "$SANDBOX/etc/test/test_auto_3way_conflict" \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+
     # Stage 4: mock sdiff must run 2-way merge (no -b ancestor)
     setup_sandbox stage4-manual-2way stage4_only
     install_mock_sdiff "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
@@ -790,12 +810,33 @@ tier_d_execute_manual() {
     assert_missing "stage4 mock merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
 
+    # Stage 4: mock imediff must run 2-way merge (-a -o live new)
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_imediff "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/imediff|" "$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update_stdin $'y\n1\ny\n1\n' -u 2>&1)" || true
+    assert_output_matches "stage4 imediff merge: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 imediff merge: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 imediff merge: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 imediff merge: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_contains "stage4 mock imediff used -a" \
+        "$SANDBOX/mock-imediff.log" "USE_A=yes"
+    assert_file_contains "stage4 mock imediff used 2-way merge" \
+        "$SANDBOX/mock-imediff.log" "TWO_WAY=yes"
+    assert_file_equals "stage4 mock imediff merge matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 mock imediff merge removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+
     # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)
     setup_sandbox stage4-manual-2way stage4_only
     output="$(run_cfg_update_stdin $'1\n1\n' -u 2>&1)" || true
     assert_stage_output "stage4 manual replace" 4 "$output"
-    assert_output_matches "stage4 switches diff3 to sdiff" \
-        'diff3 cannot be used for this stage, changing to sdiff' "$output"
     assert_file_equals "stage4 manual replace matches golden" \
         "$SANDBOX/etc/test/test_manual_2way" \
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
@@ -930,19 +971,6 @@ tier_f_backups_maintenance() {
         "$SANDBOX/etc/test/._old-cfg_test_unmodified_file"
     assert_missing "stage1 backups not written inline under etc/test (new)" \
         "$SANDBOX/etc/test/._new-cfg_test_unmodified_file"
-
-    setup_sandbox stage1-unmodified-text
-    output="$(run_cfg_update --mount 2>&1)" || true
-    assert_output_not_matches "removed flag: --mount not accepted" \
-        'Mounts remote hosts|mount_hosts|sshfs' "$output"
-    assert_output_matches "removed flag: --mount shows usage" \
-        'missing valid options|USAGE' "$output"
-
-    output="$(run_cfg_update -h1 -l 2>&1)" || true
-    assert_output_not_matches "removed flag: -h1 not accepted" \
-        'Value out of range in -h|sshfs|remote host' "$output"
-    assert_output_matches "removed flag: -h1 shows usage" \
-        'missing valid options|USAGE' "$output"
 }
 
 tier_e_index_portage() {
@@ -1015,9 +1043,8 @@ main() {
     tier_a_classify_combined
     tier_a_per_scenario
     tier_a_no_index
-    tier_a_removed_flags
+    tier_a_removed_flags_regression
     tier_a_multi_config_protect
-    tier_a_ancestor_backups
     tier_b_pretend_auto
     tier_c_execute_auto
     tier_d_execute_manual

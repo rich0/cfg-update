@@ -61,7 +61,7 @@ src_test() {
 src_install() {
 	dobin cfg-update
 	insinto /usr/lib/cfg-update
-	doins cfg-update cfg-update_indexing test.tgz
+	doins cfg-update cfg-update_indexing
 	dodoc ChangeLog
 	doman *.8
 	insinto /etc
@@ -75,9 +75,9 @@ pkg_postinst() {
 	einfo "in /etc/cfg-update.conf before using cfg-update:"
 	echo
 	einfo "If your system does not have an X-server installed you need to"
-	einfo "change the MERGE_TOOL to sdiff, imediff2 or vimdiff."
+	einfo "change the MERGE_TOOL to sdiff, imediff, or vimdiff."
 	einfo "If you have X installed, set MERGE_TOOL to your favorite GUI tool:"
-	einfo "meld (default), kdiff3, gtkdiff, gvimdiff, tkdiff, imediff2"
+	einfo "meld (default), kdiff3, xxdiff, gvimdiff, tkdiff, kompare"
 	echo
 	einfo "TIP: to maximize the chances of future automatic updates, run:"
 	einfo "cfg-update --optimize-backups"

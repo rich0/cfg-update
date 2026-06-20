@@ -59,10 +59,13 @@ Pick one tool with the capabilities you need:
 |------|--------|:---:|----------------|-------|
 | **meld** | 2-way + 3-way | Yes | `dev-util/meld` | **Default** in `cfg-update.conf` |
 | kdiff3 | 2-way + 3-way | Yes | `dev-util/kdiff3` | KDE; solid 3-way |
-| imediff2 | 2-way | No | varies | CLI; good for headless |
-| imediff | 2-way + 3-way | No | varies | CLI 3-way (2025 fork patch) |
+| xxdiff | 2-way + 3-way | Yes | — | KDE/Qt; solid 3-way; not in portage (~2011); install manually |
+| tkdiff | 2-way + 3-way | Yes | varies | Rare; Tcl/Tk GUI |
+| imediff | 2-way + 3-way | No | `dev-util/imediff` | CLI; good for headless (use 3.4.x+) |
 | sdiff | 2-way | No | `sys-apps/diffutils` | Fallback if configured tool missing |
-| vimdiff | 2-way | Optional | `app-editors/vim` | No X required |
+| vimdiff | 2-way | No | `app-editors/vim` | CLI; no X required |
+| gvimdiff | 2-way | Yes | `app-editors/vim` | GUI variant of vimdiff; requires X |
+| kompare | 2-way | Yes | `kde-apps/kompare` | KDE; 2-way only |
 
 Set in `/etc/cfg-update.conf`:
 
@@ -101,7 +104,7 @@ This project has no machine-readable dependency manifest today. Automated update
 |-----------|--------|--------|
 | GitHub Actions | Deferred (after CI) | `renovate.json` with `github-actions` manager |
 | CPAN / Perl | Optional future | Add `cpanfile` to enable Renovate `cpan` manager |
-| Gentoo packages | Manual | Track versions here; revisit when ebuild is restored |
+| Gentoo packages | Manual | Track versions here; reference ebuild in [`gentoo/`](../gentoo/) |
 | System binaries | Manual | No lockfile possible |
 
 ### Suggested `cpanfile` (future)
@@ -119,10 +122,10 @@ Run from a git checkout (no root required):
 ./test/run-tests.sh
 ```
 
-Gentoo ebuild (`gentoo/cfg-update-1.9.1-r2.ebuild`):
+Gentoo ebuild ([`gentoo/cfg-update-1.10.4.ebuild`](../gentoo/cfg-update-1.10.4.ebuild)):
 
 ```bash
-FEATURES=test USE=test emerge --oneshot /path/to/cfg-update-1.9.1-r2.ebuild
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.4.ebuild
 ```
 
 | Requirement | Gentoo package | Used in |
@@ -153,6 +156,14 @@ which diff3 md5sum xargs grep
 grep -q 'cfg-update --index' /etc/portage/bashrc && echo "hook OK"
 ```
 
-## Historical note
+## Gentoo ebuild
 
-The original Gentoo ebuild (`app-portage/cfg-update`) selected merge tools based on USE flags (`-qt -kde` for meld-only systems). This repository does not include an ebuild; install dependencies manually or via your overlay.
+A reference ebuild is maintained in [`gentoo/`](../gentoo/). Install with:
+
+```bash
+FEATURES=test USE=test emerge --oneshot /path/to/gentoo/cfg-update-1.10.4.ebuild
+```
+
+Or from the Gentoo tree: `emerge app-portage/cfg-update`.
+
+The original upstream ebuild selected merge tools based on USE flags (`-qt -kde` for meld-only systems). The in-repo ebuild uses `IUSE="test X"` and documents `meld` as the default in `pkg_postinst`.

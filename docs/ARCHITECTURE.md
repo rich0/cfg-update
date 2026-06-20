@@ -1,10 +1,10 @@
 # cfg-update Architecture
 
-This document describes how `cfg-update` works internally. For a file-by-file inventory and cleanup plan, see [INVENTORY.md](INVENTORY.md).
+This document describes how `cfg-update` works internally. For a file-by-file inventory, see [INVENTORY.md](INVENTORY.md).
 
 ## Overview
 
-`cfg-update` is a single Perl script (~2,500 lines, 53 subroutines) that:
+`cfg-update` is a single Perl script (~2,100 lines, 47 subroutines) that:
 
 1. Maintains a **checksum index** of files in `CONFIG_PROTECT` directories
 2. Scans for Portage config update markers (`._cfg????_*`)
@@ -188,8 +188,8 @@ Interactive prompts for binaries, symlinks, and custom files.
 
 Builds tool-specific command lines. Tool capabilities are detected in `check_tool`:
 
-- **2-way:** kdiff3, xxdiff, sdiff, imediff2, meld, vimdiff, …
-- **3-way:** xxdiff, kdiff3, meld, tkdiff, imediff
+- **2-way:** meld, kdiff3, xxdiff, tkdiff, imediff, sdiff, vimdiff, gvimdiff, kompare
+- **3-way:** meld, kdiff3, xxdiff, tkdiff, imediff
 - **GUI check:** `check_gui` runs only when `launch_tool` is about to execute a GUI-capable tool (not for `diff3`/`diff` in automatic stages)
 
 ## Backup system
@@ -230,6 +230,7 @@ These enable stage 2's 3-way merges on subsequent updates.
 | `cfg-update.conf` | `/etc/cfg-update.conf` |
 | `cfg-update.8` | `/usr/share/man/man8/cfg-update.8` |
 | `cfg-update_indexing` | `/usr/lib/cfg-update/cfg-update_indexing` |
+| `gentoo/cfg-update-*.ebuild` | (not installed; reference for overlays) |
 
 ## Testing
 
