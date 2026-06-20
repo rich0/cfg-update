@@ -57,7 +57,10 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | Tier | What | Checks |
 |------|------|--------|
 | 0 | static + lint | `perl -c`, `bash -n`, optional `shellcheck`, `lint-fixtures.sh` |
-| A | `-lv` | Combined + per-scenario classify (12 markers), missing-index case, removed-flag regression (`-s`, `--move-backups`, ad-hoc diff), multi `CONFIG_PROTECT` dirs, ancestor backups on disk |
+| A1 | `-lv` combined | All 12 markers in one sandbox; validates `checksum.index.seed` integration |
+| A2 | `-lv` canaries | Per-scenario classify for four edge cases: sole marker, MF conflict, dual `._cfg*`, LL symlink |
+| A3 | edge cases | Missing index (`stage0-no-index`), multi `CONFIG_PROTECT` dirs |
+| A4 | removed flags | Regression for removed options: `-s`, `--move-backups`, ad-hoc diff, `--mount`, `-h1` |
 | B | `-p -au` | Stages 1–2 pretend; live files unchanged |
 | C | `-au` | Stages 1–2 execute: golden file equality, binary MD5, 3-way conflict handling, stage 3 re-list |
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
