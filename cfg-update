@@ -1132,7 +1132,9 @@ sub cleanup_merge_view_temps {
     }
 }
 
-# Launch merge tool for Stage 3 with disposable /tmp views of ancestor + marker.
+# Launch merge tool for Stage 3/4 with disposable /tmp views of non-live inputs.
+# Stage 3: ancestor ($path_backup_new) + marker ($path_new). Stage 4: marker only
+# (ancestor view is a no-op when the backup file does not exist).
 # Temporarily rebinds existing $path_backup_new / $path_new for launch_tool only, then
 # restores them so complete/cancel paths still use the real marker and ancestor.
 sub launch_tool_with_merge_view_temps { #ARGS# ("pretend|execute","mergetool")
@@ -1441,7 +1443,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
                         if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; }
-                        &launch_tool($_[0],$merge_tool);
+                        &launch_tool_with_merge_view_temps($_[0],$merge_tool);
                         if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; print "$tab"."  To scroll up and down use [Shift]+[PgUp] and [Shift]+[PgDn]\n"; }
                         if (-e $path_merged) {
                             if ($tool_saves_mergefile_when_aborted =~ "no") {
@@ -2006,6 +2008,8 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."     press [enter] to view all merge/edit options\n";
         print "$tab"."     press [l],[enter] to select the left line(s) from the current file\n";
         print "$tab"."     press [r],[enter] to select the right line(s) from the new file\n";
+        print "$tab"."  The right (new-file) side is a temporary copy; accidental edits there\n";
+        print "$tab"."  are discarded. Save the merge output only.\n";
         print "$tab"."  When $_[0] is done, $progname will ask if you want to complete or cancel\n";
         print "$tab"."  the update...\n";
     } elsif ($_[0] =~ /^diff3$/) {
@@ -2017,14 +2021,14 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."  In $_[0] you select the lines that you want to keep by simply\n";
         print "$tab"."  clicking on the colored lines. They will appear in the merge-pane.\n";
         print "$tab"."  When done, click the M-button to save the result, then exit $_[0]!\n";
-        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
-        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update.\n";
     } elsif ($_[0] =~ /^kdiff3$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, click the save button and exit $_[0]!\n";
-        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
-        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^kompare$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
@@ -2042,25 +2046,26 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."     press [esc] return to command mode (when in edit mode)\n";
         print "$tab"."     press [:][q][a][!] to close $_[0] without saving\n";
         print "$tab"."     press [:][w][q][a] to save changes and close $_[0]\n";
+        print "$tab"."  The right (new-file) window is a temporary copy; edit the left (live) window only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^meld$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result over the current configfile by\n";
         print "$tab"."  right-clicking on the left pane and chosing \"Save\"!\n";
-        print "$tab"."  In 3-way mode the middle (ancestor) and right (new) panes are\n";
-        print "$tab"."  temporary copies; accidental edits there are discarded.\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the middle ancestor\n";
+        print "$tab"."  pane is too); accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^tkdiff$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result with the \"Save & Exit\" button!\n";
-        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
-        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^imediff$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, the merged result is written to the *.merge output file.\n";
-        print "$tab"."  In 3-way mode the ancestor and new-file inputs are temporary copies;\n";
-        print "$tab"."  accidental edits there are discarded.\n";
+        print "$tab"."  The new-file input is a temporary copy (in 3-way mode the ancestor input\n";
+        print "$tab"."  is too); accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } else {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
