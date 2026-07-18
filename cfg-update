@@ -955,15 +955,18 @@ sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
 }
 
-# Disposable /tmp copies of ancestor + marker for Stage 3 merge tools so accidental
-# saves on middle/right panes cannot corrupt $path_backup_new or $path_new (issue #65).
+# Disposable /tmp view of one non-live merge input so accidental tool saves cannot
+# corrupt permanent backups or Portage markers (issue #65; Stage 4: issue #68).
 # Orthogonal to make_temp_backups (which stages permanent backup promotion).
-# Takes basename + real paths; returns ($view_ancestor, $view_new) path strings ("" if unused).
-sub make_merge_view_temps { #ARGS# ($basename, $path_backup_new, $path_new)
-    if ($opt_d >= 1) { print "$tab"."<make_merge_view_temps>\n"; $tab = $tab."    "; }
-    my ($basename, $src_backup_new, $src_new) = @_;
-    my $view_ancestor = "";
-    my $view_new = "";
+# $role is a filename tag only (e.g. "ancestor", "new"). Returns view path or "".
+sub make_merge_view_temp { #ARGS# ($src_path, $role, $basename)
+    if ($opt_d >= 1) { print "$tab"."<make_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($src, $role, $basename) = @_;
+    my $view = "";
+    if (!defined $src || $src eq "" || !-e $src) {
+        if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n"; }
+        return $view;
+    }
     my $tmpdir = $ENV{TMPDIR};
     if (!defined $tmpdir || $tmpdir eq "") { $tmpdir = "/tmp"; }
     $tmpdir =~ s|/+$||;
@@ -971,48 +974,42 @@ sub make_merge_view_temps { #ARGS# ($basename, $path_backup_new, $path_new)
         if ($opt_d >= 1) { print "$tab"."  mkdir -p \"$tmpdir\"\n"; }
         `mkdir -p "$tmpdir" $debug`;
     }
-    my $safe = $basename;
-    $safe = "" unless defined $safe;
+    my $safe_role = defined $role ? $role : "view";
+    $safe_role =~ s/[^A-Za-z0-9._-]/_/g;
+    if ($safe_role eq "") { $safe_role = "view"; }
+    my $safe = defined $basename ? $basename : "";
     $safe =~ s/[^A-Za-z0-9._-]/_/g;
     if ($safe eq "") { $safe = "file"; }
-    if (defined $src_backup_new && -e $src_backup_new) {
-        $view_ancestor = "$tmpdir/cfg-update-$$-ancestor-$safe";
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$src_backup_new\" \"$view_ancestor\"\n"; }
-        `cp -pP "$src_backup_new" "$view_ancestor" $debug`;
-        if (!-e $view_ancestor) {
-            if ($opt_d >= 1) { print "$tab"."  failed to create $view_ancestor; using real ancestor\n"; }
-            $view_ancestor = "";
-        }
-    }
-    if (defined $src_new && -e $src_new) {
-        $view_new = "$tmpdir/cfg-update-$$-new-$safe";
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$src_new\" \"$view_new\"\n"; }
-        `cp -pP "$src_new" "$view_new" $debug`;
-        if (!-e $view_new) {
-            if ($opt_d >= 1) { print "$tab"."  failed to create $view_new; using real marker\n"; }
-            $view_new = "";
-        }
+    $view = "$tmpdir/cfg-update-$$-$safe_role-$safe";
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$src\" \"$view\"\n"; }
+    `cp -pP "$src" "$view" $debug`;
+    if (!-e $view) {
+        if ($opt_d >= 1) { print "$tab"."  failed to create $view; using real path\n"; }
+        $view = "";
     }
     if ($opt_d >= 1) {
-        print "$tab"."  path_view_ancestor = $view_ancestor\n";
-        print "$tab"."  path_view_new = $view_new\n";
-        $tab =~ s/    //; print "$tab"."</make_merge_view_temps>\n";
+        print "$tab"."  path_view = $view\n";
+        $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n";
     }
-    return ($view_ancestor, $view_new);
+    return $view;
 }
 
-sub cleanup_merge_view_temps { #ARGS# ($view_ancestor, $view_new)
-    if ($opt_d >= 1) { print "$tab"."<cleanup_merge_view_temps>\n"; $tab = $tab."    "; }
-    my ($view_ancestor, $view_new) = @_;
-    if (defined $view_ancestor && $view_ancestor ne "" && -e $view_ancestor) {
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$view_ancestor\"\n"; }
-        `rm -f "$view_ancestor" $debug`;
+sub cleanup_merge_view_temp { #ARGS# ($view_path)
+    if ($opt_d >= 1) { print "$tab"."<cleanup_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($view) = @_;
+    if (defined $view && $view ne "" && -e $view) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$view\"\n"; }
+        `rm -f "$view" $debug`;
     }
-    if (defined $view_new && $view_new ne "" && -e $view_new) {
-        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$view_new\"\n"; }
-        `rm -f "$view_new" $debug`;
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</cleanup_merge_view_temp>\n"; }
+}
+
+# Unlink zero or more disposable merge-view paths (convenience wrapper).
+sub cleanup_merge_view_temps {
+    my @views = @_;
+    foreach my $view (@views) {
+        cleanup_merge_view_temp($view);
     }
-    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</cleanup_merge_view_temps>\n"; }
 }
 
 # Launch merge tool for Stage 3 with disposable /tmp views of ancestor + marker.
@@ -1023,9 +1020,11 @@ sub launch_tool_with_merge_view_temps { #ARGS# ("pretend|execute","mergetool")
     my ($mode, $tool) = @_;
     my $real_backup_new = $path_backup_new;
     my $real_new = $path_new;
-    my ($view_ancestor, $view_new) = ("", "");
+    my $view_ancestor = "";
+    my $view_new = "";
     if ($mode =~ /execute/) {
-        ($view_ancestor, $view_new) = make_merge_view_temps($cfg_basename, $path_backup_new, $path_new);
+        $view_ancestor = make_merge_view_temp($path_backup_new, "ancestor", $cfg_basename);
+        $view_new      = make_merge_view_temp($path_new,        "new",      $cfg_basename);
         if ($view_ancestor ne "") { $path_backup_new = $view_ancestor; }
         if ($view_new ne "") { $path_new = $view_new; }
     }
