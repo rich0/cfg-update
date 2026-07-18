@@ -176,6 +176,8 @@ No conflict markers → apply merged result. Conflict → defer to stage 3.
 
 Launches the configured merge tool with ancestor, live, and new files. Requires a tool with 3-way support (meld, kdiff3, xxdiff, tkdiff, imediff).
 
+For Stage 3, the ancestor (`$path_backup_new`) and Portage marker (`$path_new`) are each copied via `make_merge_view_temp` to disposable files under `/tmp` (or `$TMPDIR`) before the tool runs, so accidental saves on non-live panes cannot corrupt permanent backups or markers. The live file and `*.merge` output paths remain real. See issue #65. Stage 4 marker-only views are tracked in issue #68.
+
 ### Stage 4 — Manual 2-way merge (`update_stage4`)
 
 Merges live file and `._cfg*` update when no backup exists. Works with all supported tools.

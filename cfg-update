@@ -955,6 +955,88 @@ sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
 }
 
+# Disposable /tmp view of one non-live merge input so accidental tool saves cannot
+# corrupt permanent backups or Portage markers (issue #65; Stage 4: issue #68).
+# Orthogonal to make_temp_backups (which stages permanent backup promotion).
+# $role is a filename tag only (e.g. "ancestor", "new"). Returns view path or "".
+sub make_merge_view_temp { #ARGS# ($src_path, $role, $basename)
+    if ($opt_d >= 1) { print "$tab"."<make_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($src, $role, $basename) = @_;
+    my $view = "";
+    if (!defined $src || $src eq "" || !-e $src) {
+        if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n"; }
+        return $view;
+    }
+    my $tmpdir = $ENV{TMPDIR};
+    if (!defined $tmpdir || $tmpdir eq "") { $tmpdir = "/tmp"; }
+    $tmpdir =~ s|/+$||;
+    if (!-d $tmpdir) {
+        if ($opt_d >= 1) { print "$tab"."  mkdir -p \"$tmpdir\"\n"; }
+        `mkdir -p "$tmpdir" $debug`;
+    }
+    my $safe_role = defined $role ? $role : "view";
+    $safe_role =~ s/[^A-Za-z0-9._-]/_/g;
+    if ($safe_role eq "") { $safe_role = "view"; }
+    my $safe = defined $basename ? $basename : "";
+    $safe =~ s/[^A-Za-z0-9._-]/_/g;
+    if ($safe eq "") { $safe = "file"; }
+    $view = "$tmpdir/cfg-update-$$-$safe_role-$safe";
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$src\" \"$view\"\n"; }
+    `cp -pP "$src" "$view" $debug`;
+    if (!-e $view) {
+        if ($opt_d >= 1) { print "$tab"."  failed to create $view; using real path\n"; }
+        $view = "";
+    }
+    if ($opt_d >= 1) {
+        print "$tab"."  path_view = $view\n";
+        $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n";
+    }
+    return $view;
+}
+
+sub cleanup_merge_view_temp { #ARGS# ($view_path)
+    if ($opt_d >= 1) { print "$tab"."<cleanup_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($view) = @_;
+    if (defined $view && $view ne "" && -e $view) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$view\"\n"; }
+        `rm -f "$view" $debug`;
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</cleanup_merge_view_temp>\n"; }
+}
+
+# Unlink zero or more disposable merge-view paths (convenience wrapper).
+sub cleanup_merge_view_temps {
+    my @views = @_;
+    foreach my $view (@views) {
+        cleanup_merge_view_temp($view);
+    }
+}
+
+# Launch merge tool for Stage 3 with disposable /tmp views of ancestor + marker.
+# Temporarily rebinds existing $path_backup_new / $path_new for launch_tool only, then
+# restores them so complete/cancel paths still use the real marker and ancestor.
+sub launch_tool_with_merge_view_temps { #ARGS# ("pretend|execute","mergetool")
+    if ($opt_d >= 1) { print "$tab"."<launch_tool_with_merge_view_temps>\n"; $tab = $tab."    "; }
+    my ($mode, $tool) = @_;
+    my $real_backup_new = $path_backup_new;
+    my $real_new = $path_new;
+    my $view_ancestor = "";
+    my $view_new = "";
+    if ($mode =~ /execute/) {
+        $view_ancestor = make_merge_view_temp($path_backup_new, "ancestor", $cfg_basename);
+        $view_new      = make_merge_view_temp($path_new,        "new",      $cfg_basename);
+        if ($view_ancestor ne "") { $path_backup_new = $view_ancestor; }
+        if ($view_new ne "") { $path_new = $view_new; }
+    }
+    launch_tool($mode, $tool);
+    $path_backup_new = $real_backup_new;
+    $path_new = $real_new;
+    if ($mode =~ /execute/) {
+        cleanup_merge_view_temps($view_ancestor, $view_new);
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</launch_tool_with_merge_view_temps>\n"; }
+}
+
 sub update_stage1{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_stage1>\n"; $tab = $tab."    "; }
     if  ($enable_stage1 !~ /^yes$|^true$|^on$/i) {
@@ -1101,7 +1183,9 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                     if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
-                        &launch_tool($_[0],$merge_tool);
+                        # Stage 3 only: pass /tmp copies of ancestor + marker so accidental
+                        # saves cannot corrupt permanent backups or Portage markers (issue #65).
+                        &launch_tool_with_merge_view_temps($_[0],$merge_tool);
                         if (-e $path_merged) {
                             if ($tool_saves_mergefile_when_aborted =~ "no") {
                                 print "$tab"."  Interactive merging completed... (or aborted)\n";
@@ -1810,10 +1894,14 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."  In $_[0] you select the lines that you want to keep by simply\n";
         print "$tab"."  clicking on the colored lines. They will appear in the merge-pane.\n";
         print "$tab"."  When done, click the M-button to save the result, then exit $_[0]!\n";
+        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
+        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update.\n";
     } elsif ($_[0] =~ /^kdiff3$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, click the save button and exit $_[0]!\n";
+        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
+        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^kompare$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
@@ -1836,10 +1924,20 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result over the current configfile by\n";
         print "$tab"."  right-clicking on the left pane and chosing \"Save\"!\n";
+        print "$tab"."  In 3-way mode the middle (ancestor) and right (new) panes are\n";
+        print "$tab"."  temporary copies; accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^tkdiff$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result with the \"Save & Exit\" button!\n";
+        print "$tab"."  In 3-way mode the ancestor and new-file panes are temporary copies;\n";
+        print "$tab"."  accidental edits there are discarded. Save the merge output only.\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^imediff$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, the merged result is written to the *.merge output file.\n";
+        print "$tab"."  In 3-way mode the ancestor and new-file inputs are temporary copies;\n";
+        print "$tab"."  accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } else {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
