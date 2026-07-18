@@ -411,13 +411,22 @@ case "${#files[@]}" in
         echo "ANCESTOR=${files[1]}" >>"$log"
         echo "NEW=${files[2]}" >>"$log"
         ;;
-    2) echo "TWO_WAY=yes" >>"$log" ;;
+    2)
+        echo "TWO_WAY=yes" >>"$log"
+        echo "LIVE=${files[0]}" >>"$log"
+        echo "NEW=${files[1]}" >>"$log"
+        ;;
 esac
-# Hostile mode: overwrite tool inputs to simulate accidental pane saves (issue #65).
-if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" && ${#files[@]} -eq 3 ]]; then
-    [[ -f "${files[1]}" ]] && echo "TRASHED-ANCESTOR" >"${files[1]}"
-    [[ -f "${files[2]}" ]] && echo "TRASHED-NEW" >"${files[2]}"
-    echo "TRASHED_INPUTS=yes" >>"$log"
+# Hostile mode: overwrite tool inputs to simulate accidental pane saves (issues #65/#68).
+if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" ]]; then
+    if [[ ${#files[@]} -eq 3 ]]; then
+        [[ -f "${files[1]}" ]] && echo "TRASHED-ANCESTOR" >"${files[1]}"
+        [[ -f "${files[2]}" ]] && echo "TRASHED-NEW" >"${files[2]}"
+        echo "TRASHED_INPUTS=yes" >>"$log"
+    elif [[ ${#files[@]} -eq 2 ]]; then
+        [[ -f "${files[1]}" ]] && echo "TRASHED-NEW" >"${files[1]}"
+        echo "TRASHED_INPUTS=yes" >>"$log"
+    fi
 fi
 if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
     cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
@@ -437,13 +446,32 @@ install_mock_sdiff() {
 log="${CFG_UPDATE_TEST_SANDBOX}/mock-sdiff.log"
 echo "$*" >>"$log"
 outfile=""
+files=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -o) outfile="$2"; shift 2 ;;
-        *) shift ;;
+        -w) shift 2 ;;   # -w WIDTH
+        -d) shift ;;     # flag, no arg
+        -*) shift ;;
+        *) files+=("$1"); shift ;;
     esac
 done
+# sdiff -w WIDTH -d -o OUT live new  → remaining args are live/new
 echo "TWO_WAY=yes" >>"$log"
+if [[ ${#files[@]} -ge 2 ]]; then
+    echo "LIVE=${files[0]}" >>"$log"
+    echo "NEW=${files[1]}" >>"$log"
+elif [[ ${#files[@]} -eq 1 ]]; then
+    echo "NEW=${files[0]}" >>"$log"
+fi
+# Hostile mode: trash new-file pane (issue #68).
+if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" && ${#files[@]} -ge 2 ]]; then
+    [[ -f "${files[1]}" ]] && echo "TRASHED-NEW" >"${files[1]}"
+    echo "TRASHED_INPUTS=yes" >>"$log"
+elif [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" && ${#files[@]} -eq 1 ]]; then
+    [[ -f "${files[0]}" ]] && echo "TRASHED-NEW" >"${files[0]}"
+    echo "TRASHED_INPUTS=yes" >>"$log"
+fi
 if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
     cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
 fi
@@ -932,6 +960,23 @@ tier_d_execute_manual() {
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
     assert_missing "stage4 mock merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    # Stage 4: new-file arg is disposable /tmp view (issue #68), not real marker
+    local real_marker_s4
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    # Marker already removed after complete; re-run path asserts with kdiff3 below.
+    assert_file_contains "stage4 sdiff new arg is merge-view temp" \
+        "$SANDBOX/mock-sdiff.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-sdiff.log" 2>/dev/null; then
+        fail "stage4 sdiff must not pass real marker path"
+    else
+        pass "stage4 sdiff did not pass real marker path"
+    fi
+    leftover="$(find "$SANDBOX/tmp" -name 'cfg-update-*' 2>/dev/null | wc -l)"
+    if [[ "$leftover" -eq 0 ]]; then
+        pass "stage4 sdiff cleaned up merge-view temps"
+    else
+        fail "stage4 sdiff left $leftover merge-view temp(s) under TMPDIR"
+    fi
 
     # Stage 4: mock imediff must run 2-way merge (-a -o live new)
     setup_sandbox stage4-manual-2way stage4_only
@@ -955,6 +1000,91 @@ tier_d_execute_manual() {
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
     assert_missing "stage4 mock imediff merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    assert_file_contains "stage4 imediff new arg is merge-view temp" \
+        "$SANDBOX/mock-imediff.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-imediff.log" 2>/dev/null; then
+        fail "stage4 imediff must not pass real marker path"
+    else
+        pass "stage4 imediff did not pass real marker path"
+    fi
+
+    # Stage 4: mock kdiff3 2-way — path assert + cleanup (issue #68)
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3 "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    output="$(run_cfg_update_stdin $'y\n1\ny\n1\n' -u 2>&1)" || true
+    # Explicit MERGE_TOOL=kdiff3: no default diff3→sdiff switch (unlike assert_stage_output).
+    assert_output_matches "stage4 kdiff3 mock merge: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 kdiff3 mock merge: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 kdiff3 mock merge: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 kdiff3 mock merge: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_contains "stage4 kdiff3 used 2-way merge" \
+        "$SANDBOX/mock-kdiff3.log" "THREE_WAY=no"
+    assert_file_contains "stage4 kdiff3 new arg is merge-view temp" \
+        "$SANDBOX/mock-kdiff3.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-kdiff3.log" 2>/dev/null; then
+        fail "stage4 kdiff3 must not pass real marker path"
+    else
+        pass "stage4 kdiff3 did not pass real marker path"
+    fi
+    leftover="$(find "$SANDBOX/tmp" -name 'cfg-update-*' 2>/dev/null | wc -l)"
+    if [[ "$leftover" -eq 0 ]]; then
+        pass "stage4 kdiff3 cleaned up merge-view temps"
+    else
+        fail "stage4 kdiff3 left $leftover merge-view temp(s) under TMPDIR"
+    fi
+    assert_file_equals "stage4 kdiff3 mock merge matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 kdiff3 mock merge removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+
+    # Stage 4: hostile mock trashes new-file view; real marker must survive cancel
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3  # no golden → no $path_merged → cancel/finish prompt
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    local marker_before_s4 marker_after_s4
+    marker_before_s4="$(md5sum "$real_marker_s4" | awk '{print $1}')"
+    # Two markers in fixture (0000 and 0001); cancel first after tool trash, then skip rest.
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\ns\ns\n' -u 2>&1)" || true
+    assert_file_contains "stage4 hostile mock trashed inputs" \
+        "$SANDBOX/mock-kdiff3.log" "TRASHED_INPUTS=yes"
+    marker_after_s4="$(md5sum "$real_marker_s4" | awk '{print $1}')"
+    if [[ "$marker_before_s4" == "$marker_after_s4" ]]; then
+        pass "stage4 hostile cancel left real marker intact"
+    else
+        fail "stage4 hostile cancel corrupted real marker"
+    fi
+    assert_file_exists "stage4 hostile cancel kept cfg marker" "$real_marker_s4"
+
+    # Stage 4: hostile mock trashes inputs; successful merge still uses real paths
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3 "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    # Sandbox --ebuild sets tool_saves_mergefile_when_aborted=no, so confirm with [1].
+    # Two queued markers: complete first merge, then keep/skip second.
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\n1\n2\n' -u 2>&1)" || true
+    assert_output_matches "stage4 hostile complete: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 hostile complete: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 hostile complete: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 hostile complete: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_equals "stage4 hostile complete matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 hostile complete removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    assert_file_contains "stage4 hostile complete used merge-view temps" \
+        "$SANDBOX/mock-kdiff3.log" "NEW=${SANDBOX}/tmp/cfg-update-"
 
     # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)
     setup_sandbox stage4-manual-2way stage4_only
