@@ -955,6 +955,126 @@ sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
 }
 
+# Look up Portage VDB CONTENTS MD5 for the live config path (issue #66).
+# Uses the package with the highest BUILD_TIME (last install); falls back to
+# CONTENTS mtime when BUILD_TIME is missing. Does not read checksum.index.
+# Returns ($status, $md5_or_reason): status is "ok" or "unavailable".
+# All inputs via parameters — no package globals.
+sub lookup_contents_md5_for_live { #ARGS# ($path_live, $pkg_manager, $pkg_db)
+    my ($path_live, $pkg_manager, $pkg_db) = @_;
+    if (!defined $path_live || $path_live eq "") {
+        return ("unavailable", "empty path");
+    }
+    if (!defined $pkg_manager || $pkg_manager !~ /^portage$/i) {
+        return ("unavailable", "not Portage");
+    }
+    if (!defined $pkg_db || $pkg_db eq "" || !-d $pkg_db) {
+        return ("unavailable", "no pkg_db");
+    }
+
+    my $best_md5;
+    my $best_time = -1;
+
+    opendir(my $cat_dh, $pkg_db) or return ("unavailable", "cannot open pkg_db");
+    while (defined(my $category = readdir($cat_dh))) {
+        next if $category eq "." || $category eq "..";
+        my $cat_path = "$pkg_db/$category";
+        next unless -d $cat_path;
+        opendir(my $pkg_dh, $cat_path) or next;
+        while (defined(my $pkg = readdir($pkg_dh))) {
+            next if $pkg eq "." || $pkg eq "..";
+            my $pkg_path = "$cat_path/$pkg";
+            my $contents = "$pkg_path/CONTENTS";
+            next unless -f $contents;
+
+            my $install_time = 0;
+            if (open(my $bt, "<", "$pkg_path/BUILD_TIME")) {
+                my $line = <$bt>;
+                close($bt);
+                if (defined $line && $line =~ /^\s*(\d+)\s*$/) {
+                    $install_time = $1 + 0;
+                }
+            }
+            if ($install_time <= 0) {
+                $install_time = (stat($contents))[9] // 0;
+            }
+
+            open(my $fh, "<", $contents) or next;
+            while (defined(my $line = <$fh>)) {
+                # Portage: obj <path> <md5> <mtime>
+                if ($line =~ /^obj\s+(\S+)\s+([0-9a-fA-F]{32})\b/) {
+                    my ($obj_path, $md5) = ($1, lc($2));
+                    if ($obj_path eq $path_live && $install_time >= $best_time) {
+                        $best_time = $install_time;
+                        $best_md5 = $md5;
+                    }
+                }
+            }
+            close($fh);
+        }
+        closedir($pkg_dh);
+    }
+    closedir($cat_dh);
+
+    if (!defined $best_md5) {
+        return ("unavailable", "no CONTENTS match");
+    }
+    return ("ok", $best_md5);
+}
+
+# Promote staged marker snapshot ($path_temp_new) to permanent Stage 2 ancestor
+# ($path_backup_new) only when it still matches Portage CONTENTS for $path_live
+# (issue #66). On mismatch: warn and skip promote. On missing VDB: fail open.
+# Returns 1 if promoted (or would under pretend), 0 if skipped for mismatch.
+# All inputs via parameters — no package globals. Caller still removes temp_new.
+sub promote_backup_new { #ARGS# ($mode, $path_temp_new, $path_backup_new, $path_live, $pkg_manager, $pkg_db, $enable_backups, $indent)
+    my ($mode, $path_temp_new, $path_backup_new, $path_live,
+        $pkg_manager, $pkg_db, $enable_backups, $indent) = @_;
+    $indent = "" if !defined $indent;
+    $mode = "" if !defined $mode;
+
+    if (!defined $enable_backups || $enable_backups !~ /^yes$|^true$|^on$/i) {
+        return 1;
+    }
+    if (!defined $path_temp_new || $path_temp_new eq "" || !-e $path_temp_new) {
+        return 1;
+    }
+    if (!defined $path_backup_new || $path_backup_new eq "") {
+        return 1;
+    }
+
+    my $marker_md5 = "";
+    {
+        my $out = `md5sum "$path_temp_new" 2>/dev/null`;
+        if (defined $out && $out =~ /^([0-9a-fA-F]{32})\b/) {
+            $marker_md5 = lc($1);
+        }
+    }
+
+    my ($status, $detail) = lookup_contents_md5_for_live($path_live, $pkg_manager, $pkg_db);
+
+    if ($status eq "ok") {
+        my $contents_md5 = $detail;
+        if ($marker_md5 ne "" && $marker_md5 eq $contents_md5) {
+            if ($mode =~ /execute/) {
+                `cp -pP "$path_temp_new" "$path_backup_new" 2>/dev/null`;
+            }
+            return 1;
+        }
+        print BOLD YELLOW "$indent"."* Warning: Portage marker does not match CONTENTS MD5 for $path_live\n";
+        print "$indent"."  marker MD5=$marker_md5 CONTENTS MD5=$contents_md5\n";
+        print BOLD YELLOW "$indent"."* Not promoting tampered marker as Stage 2 ancestor (._new-cfg_*)\n";
+        return 0;
+    }
+
+    # unavailable: fail open (maintain prior promote behavior)
+    print BOLD YELLOW "$indent"."* Warning: cannot validate marker against Portage CONTENTS ($detail); promoting ancestor as usual\n";
+    if ($mode =~ /execute/) {
+        `cp -pP "$path_temp_new" "$path_backup_new" 2>/dev/null`;
+    }
+    return 1;
+}
+
 # Disposable /tmp view of one non-live merge input so accidental tool saves cannot
 # corrupt permanent backups or Portage markers (issue #65; Stage 4: issue #68).
 # Orthogonal to make_temp_backups (which stages permanent backup promotion).
@@ -1545,8 +1665,9 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($is_executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
@@ -1571,8 +1692,9 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist!)\n"; }
@@ -1592,8 +1714,9 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist)\n"; }

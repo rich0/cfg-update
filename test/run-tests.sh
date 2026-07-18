@@ -143,6 +143,7 @@ write_test_config() {
     local conf="$1" index="$2" backup="$3"
     local stages="${4:-all}"
     local merge_tool="${5:-/usr/bin/diff3}"
+    local pkg_db="${6:-}"
     local s1=yes s2=yes s3=yes s4=yes s5=yes
     if [[ "$stages" == "auto" ]]; then
         s3=no s4=no s5=no
@@ -166,6 +167,23 @@ ENABLE_STAGE5 = $s5
 INDEX_FILE = $index
 BACKUP_PATH = $backup
 EOF
+    if [[ -n "$pkg_db" ]]; then
+        echo "PKG_DB = $pkg_db" >>"$conf"
+    fi
+}
+
+# Install a Portage CONTENTS entry for a live path (issue #66 promote validation).
+# Args: live_abs_path md5 [pkg_slot_dir relative to SANDBOX/var/db/pkg] [BUILD_TIME]
+install_contents_obj() {
+    local live_path="$1"
+    local md5="$2"
+    local slot_rel="${3:-app-test/test-pkg-1.0}"
+    local build_time="${4:-1000}"
+    local pkg_dir="$SANDBOX/var/db/pkg/$slot_rel"
+    mkdir -p "$pkg_dir"
+    # Append so multi-package scenarios can stack entries in separate slots.
+    echo "obj $live_path $md5 0" >>"$pkg_dir/CONTENTS"
+    echo "$build_time" >"$pkg_dir/BUILD_TIME"
 }
 
 install_portageq_mock() {
@@ -1129,6 +1147,90 @@ tier_e_index_portage() {
         'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*_cfg0000_test_unmodified_file' "$output"
 }
 
+tier_g_contents_promote_validation() {
+    echo "=== Tier G: CONTENTS marker promote validation (issue #66) ==="
+    local output backup_root live marker_md5 pristine_marker
+
+    # --- Pristine marker: CONTENTS matches → promote ._new-cfg_* ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    install_contents_obj "$live" "$marker_md5" "app-test/test-pkg-1.0" "2000"
+    # Point PKG_DB at sandbox VDB (not host /var/db/pkg).
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "pristine CONTENTS: promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_md5_equals "pristine CONTENTS: ancestor MD5 equals marker" \
+        "$backup_root/._new-cfg_test_unmodified_file" "$marker_md5"
+    assert_missing "pristine CONTENTS: cfg marker removed after stage1" \
+        "$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+
+    # --- Tampered marker: CONTENTS still pristine → do not poison ancestor ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    install_contents_obj "$live" "$marker_md5" "app-test/test-pkg-1.0" "2000"
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+    # External pre-session tamper (the footgun issue #66 covers).
+    printf 'TAMPERED-MARKER\n' >"$pristine_marker"
+
+    output="$(run_cfg_update -au 2>&1)" || true
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_output_matches "tampered marker: CONTENTS mismatch warning" \
+        'does not match CONTENTS MD5' "$output"
+    assert_output_matches "tampered marker: refused Stage 2 ancestor promote" \
+        'Not promoting tampered marker' "$output"
+    # Stage1 still applies the (tampered) marker to the live file.
+    assert_file_contains "tampered marker: live update still completed" \
+        "$live" "TAMPERED-MARKER"
+    assert_missing "tampered marker: cfg marker still removed" \
+        "$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    if [[ -f "$backup_root/._new-cfg_test_unmodified_file" ]]; then
+        if grep -q 'TAMPERED-MARKER' "$backup_root/._new-cfg_test_unmodified_file"; then
+            fail "tampered marker: ancestor must not contain TAMPERED content"
+        else
+            pass "tampered marker: existing ancestor not poisoned with TAMPERED"
+        fi
+    else
+        pass "tampered marker: no new-cfg ancestor written"
+    fi
+
+    # --- Missing CONTENTS: fail open → still promote (regression guard) ---
+    setup_sandbox stage1-unmodified-text auto
+    # Explicit empty pkg_db so host VDB cannot interfere.
+    mkdir -p "$SANDBOX/var/db/pkg-empty"
+    echo "PKG_DB = $SANDBOX/var/db/pkg-empty" >>"$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update -au 2>&1)" || true
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_output_matches "missing CONTENTS: fail-open validation warning" \
+        'cannot validate marker against Portage CONTENTS' "$output"
+    assert_file_exists "missing CONTENTS: still promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+
+    # --- Multi-package: last install (higher BUILD_TIME) wins ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    # Older package has a wrong/stale MD5; newer package has the real marker MD5.
+    install_contents_obj "$live" "00000000000000000000000000000000" \
+        "app-test/old-pkg-1.0" "1000"
+    install_contents_obj "$live" "$marker_md5" \
+        "app-test/new-pkg-2.0" "9000"
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "last-install CONTENTS: promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_md5_equals "last-install CONTENTS: ancestor matches newer package MD5" \
+        "$backup_root/._new-cfg_test_unmodified_file" "$marker_md5"
+}
+
 main() {
     parse_args "$@"
 
@@ -1155,6 +1257,7 @@ main() {
     tier_d_execute_manual
     tier_e_index_portage
     tier_f_backups_maintenance
+    tier_g_contents_promote_validation
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"

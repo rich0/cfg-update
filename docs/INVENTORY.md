@@ -106,6 +106,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `update_stage1`–`update_stage5` | Per-stage logic |
 | `update_retry`, `update_canceled`, `update_merge_*`, `update_replace_complete`, `update_keep_complete` | Interactive update handlers |
 | `make_temp_backups` | Temp files during merge |
+| `lookup_contents_md5_for_live`, `promote_backup_new` | Validate marker vs Portage CONTENTS before Stage 2 ancestor promote (issue #66) |
 
 ### Index and hooks
 

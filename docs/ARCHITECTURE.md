@@ -205,6 +205,15 @@ Backups live under `/var/lib/cfg-update/backups/`, mirroring the original path:
 
 These enable stage 2's 3-way merges on subsequent updates.
 
+Before writing `._new-cfg_*`, cfg-update compares the staged marker snapshot
+(`$path_temp_new`) to the Portage VDB `CONTENTS` MD5 for the **live path**
+(not the checksum index, and not the `._cfg*` filename). The digest is taken
+from the most recently installed package that owns that path (`BUILD_TIME`,
+else CONTENTS mtime). On match, the ancestor is promoted as usual. On
+mismatch, a warning is printed and the bad content is **not** stored as the
+Stage 2 ancestor (issue #66). If CONTENTS is missing, unparseable, or the
+manager is not Portage, promotion fails open (prior behavior) with a warning.
+
 | Command | Purpose |
 |---------|---------|
 | `-b` / `--backups` | List available backups |
