@@ -40,3 +40,16 @@ All work on **topic branches** → PR to `develop`.
 perl -c cfg-update
 ./test/run-tests.sh --full
 ```
+
+## Optional: MentisDB memory
+
+If MentisDB MCP tools are available in this session:
+- Use chain_key `cfg-update` (do not create another chain for this repo).
+- Session start: list_chains → bootstrap → skill_md → list_agents → recent_context → Summary checkpoint.
+- Reuse an existing agent_id; do not invent new agent IDs without maintainer approval.
+- Persist Decision / Constraint / LessonLearned / TaskComplete / Checkpoint as work progresses.
+- Search before append; one strong memory beats many weak ones.
+
+If MentisDB tools are not available: **ignore this section completely**.
+Do not invent a substitute, do not fail, and do not ask the user to install MentisDB
+unless they explicitly want project memory.
