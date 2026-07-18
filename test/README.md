@@ -62,8 +62,9 @@ FEATURES=test USE=test emerge --oneshot app-portage/cfg-update
 | D | `-u` + stdin | Stages 3–5 execute (one stage enabled at a time): stage-specific output, mock 3-way merge, replace/keep filesystem outcomes |
 | E | `-i` / `-i -f` | Portage `--index`: up-to-date skip, stale rebuild from mock CONTENTS, marker-blocked skip, force rebuild |
 | F | `-b`, `-r`, `--optimize-backups` | Backup list/restore after stage-2 update; stage-1 backups land in `BACKUP_PATH` (not inline); optimize-backups creates `._new-cfg_*` for unmodified files |
+| G | CONTENTS promote validation | Issue #66: pristine marker promotes `._new-cfg_*`; tampered marker does not poison ancestor; missing CONTENTS fails open; last-install `BUILD_TIME` wins |
 
-Tier B/C/D/E/F pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, and `--optimize-backups` skip the root check inside the temp sandbox.
+Tier B/C/D/E/F/G pass `--testsandbox` with `--ebuild` so `-u`, `--index`, `-r`, and `--optimize-backups` skip the root check inside the temp sandbox.
 
 ### Golden `expected/` files
 
