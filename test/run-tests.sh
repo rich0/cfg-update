@@ -143,6 +143,7 @@ write_test_config() {
     local conf="$1" index="$2" backup="$3"
     local stages="${4:-all}"
     local merge_tool="${5:-/usr/bin/diff3}"
+    local pkg_db="${6:-}"
     local s1=yes s2=yes s3=yes s4=yes s5=yes
     if [[ "$stages" == "auto" ]]; then
         s3=no s4=no s5=no
@@ -166,6 +167,23 @@ ENABLE_STAGE5 = $s5
 INDEX_FILE = $index
 BACKUP_PATH = $backup
 EOF
+    if [[ -n "$pkg_db" ]]; then
+        echo "PKG_DB = $pkg_db" >>"$conf"
+    fi
+}
+
+# Install a Portage CONTENTS entry for a live path (issue #66 promote validation).
+# Args: live_abs_path md5 [pkg_slot_dir relative to SANDBOX/var/db/pkg] [BUILD_TIME]
+install_contents_obj() {
+    local live_path="$1"
+    local md5="$2"
+    local slot_rel="${3:-app-test/test-pkg-1.0}"
+    local build_time="${4:-1000}"
+    local pkg_dir="$SANDBOX/var/db/pkg/$slot_rel"
+    mkdir -p "$pkg_dir"
+    # Append so multi-package scenarios can stack entries in separate slots.
+    echo "obj $live_path $md5 0" >>"$pkg_dir/CONTENTS"
+    echo "$build_time" >"$pkg_dir/BUILD_TIME"
 }
 
 install_portageq_mock() {
@@ -267,8 +285,11 @@ setup_multi_config_protect_sandbox() {
 
 run_cfg_update() {
     local extra_args=("$@")
+    # Isolate disposable Stage 3 merge-view temps under the sandbox (issue #65).
+    mkdir -p "$SANDBOX/tmp"
     CFG_UPDATE_CONF="$SANDBOX/etc/cfg-update.conf" \
     PATH="$SANDBOX/bin:$PATH" \
+    TMPDIR="$SANDBOX/tmp" \
     perl "$CFG_UPDATE" --ebuild --testsandbox "${extra_args[@]}"
 }
 
@@ -288,15 +309,31 @@ echo "$*" >>"$log"
 outfile=""
 ancestor=""
 threeway="no"
+files=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -o) outfile="$2"; shift 2 ;;
         -b) ancestor="$2"; threeway="yes"; shift 2 ;;
         -m) shift ;;
-        *) shift ;;
+        *) files+=("$1"); shift ;;
     esac
 done
 echo "THREE_WAY=$threeway" >>"$log"
+if [[ -n "$ancestor" ]]; then
+    echo "ANCESTOR=$ancestor" >>"$log"
+fi
+if [[ ${#files[@]} -ge 1 ]]; then
+    echo "LIVE=${files[0]}" >>"$log"
+fi
+if [[ ${#files[@]} -ge 2 ]]; then
+    echo "NEW=${files[1]}" >>"$log"
+fi
+# Hostile mode: overwrite tool inputs to simulate accidental pane saves (issue #65).
+if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" ]]; then
+    [[ -n "$ancestor" && -f "$ancestor" ]] && echo "TRASHED-ANCESTOR" >"$ancestor"
+    [[ ${#files[@]} -ge 2 && -f "${files[1]}" ]] && echo "TRASHED-NEW" >"${files[1]}"
+    echo "TRASHED_INPUTS=yes" >>"$log"
+fi
 if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
     cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
 fi
@@ -368,9 +405,29 @@ if [[ "$use_a" == "yes" ]]; then
     echo "USE_A=yes" >>"$log"
 fi
 case "${#files[@]}" in
-    3) echo "THREE_WAY=yes" >>"$log" ;;
-    2) echo "TWO_WAY=yes" >>"$log" ;;
+    3)
+        echo "THREE_WAY=yes" >>"$log"
+        echo "LIVE=${files[0]}" >>"$log"
+        echo "ANCESTOR=${files[1]}" >>"$log"
+        echo "NEW=${files[2]}" >>"$log"
+        ;;
+    2)
+        echo "TWO_WAY=yes" >>"$log"
+        echo "LIVE=${files[0]}" >>"$log"
+        echo "NEW=${files[1]}" >>"$log"
+        ;;
 esac
+# Hostile mode: overwrite tool inputs to simulate accidental pane saves (issues #65/#68).
+if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" ]]; then
+    if [[ ${#files[@]} -eq 3 ]]; then
+        [[ -f "${files[1]}" ]] && echo "TRASHED-ANCESTOR" >"${files[1]}"
+        [[ -f "${files[2]}" ]] && echo "TRASHED-NEW" >"${files[2]}"
+        echo "TRASHED_INPUTS=yes" >>"$log"
+    elif [[ ${#files[@]} -eq 2 ]]; then
+        [[ -f "${files[1]}" ]] && echo "TRASHED-NEW" >"${files[1]}"
+        echo "TRASHED_INPUTS=yes" >>"$log"
+    fi
+fi
 if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
     cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
 fi
@@ -389,13 +446,32 @@ install_mock_sdiff() {
 log="${CFG_UPDATE_TEST_SANDBOX}/mock-sdiff.log"
 echo "$*" >>"$log"
 outfile=""
+files=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -o) outfile="$2"; shift 2 ;;
-        *) shift ;;
+        -w) shift 2 ;;   # -w WIDTH
+        -d) shift ;;     # flag, no arg
+        -*) shift ;;
+        *) files+=("$1"); shift ;;
     esac
 done
+# sdiff -w WIDTH -d -o OUT live new  → remaining args are live/new
 echo "TWO_WAY=yes" >>"$log"
+if [[ ${#files[@]} -ge 2 ]]; then
+    echo "LIVE=${files[0]}" >>"$log"
+    echo "NEW=${files[1]}" >>"$log"
+elif [[ ${#files[@]} -eq 1 ]]; then
+    echo "NEW=${files[0]}" >>"$log"
+fi
+# Hostile mode: trash new-file pane (issue #68).
+if [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" && ${#files[@]} -ge 2 ]]; then
+    [[ -f "${files[1]}" ]] && echo "TRASHED-NEW" >"${files[1]}"
+    echo "TRASHED_INPUTS=yes" >>"$log"
+elif [[ "${CFG_UPDATE_MOCK_TRASH_INPUTS:-}" == "1" && ${#files[@]} -eq 1 ]]; then
+    [[ -f "${files[0]}" ]] && echo "TRASHED-NEW" >"${files[0]}"
+    echo "TRASHED_INPUTS=yes" >>"$log"
+fi
 if [[ -n "$outfile" && -f "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" ]]; then
     cp "${CFG_UPDATE_TEST_SANDBOX}/golden.merge" "$outfile"
 fi
@@ -780,6 +856,77 @@ tier_d_execute_manual() {
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
 
+    # Stage 3: ancestor/new args are disposable /tmp views (issue #65), not real paths
+    local real_ancestor real_marker
+    real_ancestor="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test/._new-cfg_test_auto_3way_conflict"
+    real_marker="$SANDBOX/etc/test/._cfg0000_test_auto_3way_conflict"
+    assert_file_contains "stage3 kdiff3 ancestor arg is merge-view temp" \
+        "$SANDBOX/mock-kdiff3.log" "ANCESTOR=${SANDBOX}/tmp/cfg-update-"
+    assert_file_contains "stage3 kdiff3 new arg is merge-view temp" \
+        "$SANDBOX/mock-kdiff3.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "ANCESTOR=${real_ancestor}" "$SANDBOX/mock-kdiff3.log" 2>/dev/null; then
+        fail "stage3 kdiff3 must not pass real ancestor path"
+    else
+        pass "stage3 kdiff3 did not pass real ancestor path"
+    fi
+    if grep -q "NEW=${real_marker}" "$SANDBOX/mock-kdiff3.log" 2>/dev/null; then
+        fail "stage3 kdiff3 must not pass real marker path"
+    else
+        pass "stage3 kdiff3 did not pass real marker path"
+    fi
+    local leftover
+    leftover="$(find "$SANDBOX/tmp" -name 'cfg-update-*' 2>/dev/null | wc -l)"
+    if [[ "$leftover" -eq 0 ]]; then
+        pass "stage3 cleaned up merge-view temps"
+    else
+        fail "stage3 left $leftover merge-view temp(s) under TMPDIR"
+    fi
+
+    # Stage 3: hostile mock trashes tool inputs; real ancestor/marker must survive cancel
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    install_mock_kdiff3  # no golden → no $path_merged → cancel/finish prompt
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    real_ancestor="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test/._new-cfg_test_auto_3way_conflict"
+    real_marker="$SANDBOX/etc/test/._cfg0000_test_auto_3way_conflict"
+    local ancestor_before marker_before
+    ancestor_before="$(md5sum "$real_ancestor" | awk '{print $1}')"
+    marker_before="$(md5sum "$real_marker" | awk '{print $1}')"
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\ns\n' -u 2>&1)" || true
+    assert_file_contains "stage3 hostile mock trashed inputs" \
+        "$SANDBOX/mock-kdiff3.log" "TRASHED_INPUTS=yes"
+    local ancestor_after marker_after
+    ancestor_after="$(md5sum "$real_ancestor" | awk '{print $1}')"
+    marker_after="$(md5sum "$real_marker" | awk '{print $1}')"
+    if [[ "$ancestor_before" == "$ancestor_after" ]]; then
+        pass "stage3 hostile cancel left real ancestor intact"
+    else
+        fail "stage3 hostile cancel corrupted real ancestor"
+    fi
+    if [[ "$marker_before" == "$marker_after" ]]; then
+        pass "stage3 hostile cancel left real marker intact"
+    else
+        fail "stage3 hostile cancel corrupted real marker"
+    fi
+    assert_file_exists "stage3 hostile cancel kept cfg marker" "$real_marker"
+
+    # Stage 3: hostile mock trashes inputs; successful merge still uses real paths for complete
+    setup_sandbox stage2-3way-merge-conflict stage3_only
+    install_mock_kdiff3 \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    # Sandbox --ebuild sets tool_saves_mergefile_when_aborted=no, so confirm with [1].
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\n1\n' -u 2>&1)" || true
+    assert_stage_output "stage3 hostile complete" 3 "$output"
+    assert_file_equals "stage3 hostile complete matches golden" \
+        "$SANDBOX/etc/test/test_auto_3way_conflict" \
+        "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    assert_missing "stage3 hostile complete removed cfg marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_auto_3way_conflict"
+    # After complete, ancestor is replaced by promoted path_temp_new (pre-merge marker),
+    # not by the trashed view copy. The important check: trash never touched real files mid-run.
+    assert_file_contains "stage3 hostile complete used merge-view temps" \
+        "$SANDBOX/mock-kdiff3.log" "ANCESTOR=${SANDBOX}/tmp/cfg-update-"
+
     # Stage 3: mock imediff must receive 3-way (-a -o live ancestor new)
     setup_sandbox stage2-3way-merge-conflict stage3_only
     install_mock_imediff \
@@ -794,6 +941,10 @@ tier_d_execute_manual() {
     assert_file_equals "stage3 mock imediff merge matches golden" \
         "$SANDBOX/etc/test/test_auto_3way_conflict" \
         "$FIXTURES/stage2-3way-merge-conflict/expected/test_auto_3way_conflict.after_replace"
+    assert_file_contains "stage3 imediff ancestor arg is merge-view temp" \
+        "$SANDBOX/mock-imediff.log" "ANCESTOR=${SANDBOX}/tmp/cfg-update-"
+    assert_file_contains "stage3 imediff new arg is merge-view temp" \
+        "$SANDBOX/mock-imediff.log" "NEW=${SANDBOX}/tmp/cfg-update-"
 
     # Stage 4: mock sdiff must run 2-way merge (no -b ancestor)
     setup_sandbox stage4-manual-2way stage4_only
@@ -809,6 +960,23 @@ tier_d_execute_manual() {
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
     assert_missing "stage4 mock merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    # Stage 4: new-file arg is disposable /tmp view (issue #68), not real marker
+    local real_marker_s4
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    # Marker already removed after complete; re-run path asserts with kdiff3 below.
+    assert_file_contains "stage4 sdiff new arg is merge-view temp" \
+        "$SANDBOX/mock-sdiff.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-sdiff.log" 2>/dev/null; then
+        fail "stage4 sdiff must not pass real marker path"
+    else
+        pass "stage4 sdiff did not pass real marker path"
+    fi
+    leftover="$(find "$SANDBOX/tmp" -name 'cfg-update-*' 2>/dev/null | wc -l)"
+    if [[ "$leftover" -eq 0 ]]; then
+        pass "stage4 sdiff cleaned up merge-view temps"
+    else
+        fail "stage4 sdiff left $leftover merge-view temp(s) under TMPDIR"
+    fi
 
     # Stage 4: mock imediff must run 2-way merge (-a -o live new)
     setup_sandbox stage4-manual-2way stage4_only
@@ -832,6 +1000,91 @@ tier_d_execute_manual() {
         "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
     assert_missing "stage4 mock imediff merge removed cfg0000 marker" \
         "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    assert_file_contains "stage4 imediff new arg is merge-view temp" \
+        "$SANDBOX/mock-imediff.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-imediff.log" 2>/dev/null; then
+        fail "stage4 imediff must not pass real marker path"
+    else
+        pass "stage4 imediff did not pass real marker path"
+    fi
+
+    # Stage 4: mock kdiff3 2-way — path assert + cleanup (issue #68)
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3 "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    output="$(run_cfg_update_stdin $'y\n1\ny\n1\n' -u 2>&1)" || true
+    # Explicit MERGE_TOOL=kdiff3: no default diff3→sdiff switch (unlike assert_stage_output).
+    assert_output_matches "stage4 kdiff3 mock merge: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 kdiff3 mock merge: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 kdiff3 mock merge: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 kdiff3 mock merge: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_contains "stage4 kdiff3 used 2-way merge" \
+        "$SANDBOX/mock-kdiff3.log" "THREE_WAY=no"
+    assert_file_contains "stage4 kdiff3 new arg is merge-view temp" \
+        "$SANDBOX/mock-kdiff3.log" "NEW=${SANDBOX}/tmp/cfg-update-"
+    if grep -q "NEW=${real_marker_s4}" "$SANDBOX/mock-kdiff3.log" 2>/dev/null; then
+        fail "stage4 kdiff3 must not pass real marker path"
+    else
+        pass "stage4 kdiff3 did not pass real marker path"
+    fi
+    leftover="$(find "$SANDBOX/tmp" -name 'cfg-update-*' 2>/dev/null | wc -l)"
+    if [[ "$leftover" -eq 0 ]]; then
+        pass "stage4 kdiff3 cleaned up merge-view temps"
+    else
+        fail "stage4 kdiff3 left $leftover merge-view temp(s) under TMPDIR"
+    fi
+    assert_file_equals "stage4 kdiff3 mock merge matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 kdiff3 mock merge removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+
+    # Stage 4: hostile mock trashes new-file view; real marker must survive cancel
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3  # no golden → no $path_merged → cancel/finish prompt
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    real_marker_s4="$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    local marker_before_s4 marker_after_s4
+    marker_before_s4="$(md5sum "$real_marker_s4" | awk '{print $1}')"
+    # Two markers in fixture (0000 and 0001); cancel first after tool trash, then skip rest.
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\ns\ns\n' -u 2>&1)" || true
+    assert_file_contains "stage4 hostile mock trashed inputs" \
+        "$SANDBOX/mock-kdiff3.log" "TRASHED_INPUTS=yes"
+    marker_after_s4="$(md5sum "$real_marker_s4" | awk '{print $1}')"
+    if [[ "$marker_before_s4" == "$marker_after_s4" ]]; then
+        pass "stage4 hostile cancel left real marker intact"
+    else
+        fail "stage4 hostile cancel corrupted real marker"
+    fi
+    assert_file_exists "stage4 hostile cancel kept cfg marker" "$real_marker_s4"
+
+    # Stage 4: hostile mock trashes inputs; successful merge still uses real paths
+    setup_sandbox stage4-manual-2way stage4_only
+    install_mock_kdiff3 "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    sed -i "s|^MERGE_TOOL = .*|MERGE_TOOL = $SANDBOX/bin/kdiff3|" "$SANDBOX/etc/cfg-update.conf"
+    # Sandbox --ebuild sets tool_saves_mergefile_when_aborted=no, so confirm with [1].
+    # Two queued markers: complete first merge, then keep/skip second.
+    output="$(CFG_UPDATE_MOCK_TRASH_INPUTS=1 run_cfg_update_stdin $'y\n1\n2\n' -u 2>&1)" || true
+    assert_output_matches "stage4 hostile complete: stage banner" \
+        "<< Stage4 >>" "$output"
+    assert_output_matches "stage4 hostile complete: 2-way merge mode" \
+        'manual 2-way merging, starting' "$output"
+    assert_output_not_matches "stage4 hostile complete: not 3-way mode" \
+        'manual 3-way merging, starting' "$output"
+    assert_output_not_matches "stage4 hostile complete: no diff3 switch" \
+        'diff3 cannot be used for this stage, changing to sdiff' "$output"
+    assert_file_equals "stage4 hostile complete matches golden" \
+        "$SANDBOX/etc/test/test_manual_2way" \
+        "$FIXTURES/stage4-manual-2way/expected/test_manual_2way"
+    assert_missing "stage4 hostile complete removed cfg0000 marker" \
+        "$SANDBOX/etc/test/._cfg0000_test_manual_2way"
+    assert_file_contains "stage4 hostile complete used merge-view temps" \
+        "$SANDBOX/mock-kdiff3.log" "NEW=${SANDBOX}/tmp/cfg-update-"
 
     # Stage 4: replace (MF, no ancestor — must not run stage 3/5 handlers)
     setup_sandbox stage4-manual-2way stage4_only
@@ -1024,6 +1277,90 @@ tier_e_index_portage() {
         'Stage\[1\][[:space:]]+Unmodified File[[:space:]].*_cfg0000_test_unmodified_file' "$output"
 }
 
+tier_g_contents_promote_validation() {
+    echo "=== Tier G: CONTENTS marker promote validation (issue #66) ==="
+    local output backup_root live marker_md5 pristine_marker
+
+    # --- Pristine marker: CONTENTS matches → promote ._new-cfg_* ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    install_contents_obj "$live" "$marker_md5" "app-test/test-pkg-1.0" "2000"
+    # Point PKG_DB at sandbox VDB (not host /var/db/pkg).
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "pristine CONTENTS: promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_md5_equals "pristine CONTENTS: ancestor MD5 equals marker" \
+        "$backup_root/._new-cfg_test_unmodified_file" "$marker_md5"
+    assert_missing "pristine CONTENTS: cfg marker removed after stage1" \
+        "$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+
+    # --- Tampered marker: CONTENTS still pristine → do not poison ancestor ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    install_contents_obj "$live" "$marker_md5" "app-test/test-pkg-1.0" "2000"
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+    # External pre-session tamper (the footgun issue #66 covers).
+    printf 'TAMPERED-MARKER\n' >"$pristine_marker"
+
+    output="$(run_cfg_update -au 2>&1)" || true
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_output_matches "tampered marker: CONTENTS mismatch warning" \
+        'does not match CONTENTS MD5' "$output"
+    assert_output_matches "tampered marker: refused Stage 2 ancestor promote" \
+        'Not promoting tampered marker' "$output"
+    # Stage1 still applies the (tampered) marker to the live file.
+    assert_file_contains "tampered marker: live update still completed" \
+        "$live" "TAMPERED-MARKER"
+    assert_missing "tampered marker: cfg marker still removed" \
+        "$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    if [[ -f "$backup_root/._new-cfg_test_unmodified_file" ]]; then
+        if grep -q 'TAMPERED-MARKER' "$backup_root/._new-cfg_test_unmodified_file"; then
+            fail "tampered marker: ancestor must not contain TAMPERED content"
+        else
+            pass "tampered marker: existing ancestor not poisoned with TAMPERED"
+        fi
+    else
+        pass "tampered marker: no new-cfg ancestor written"
+    fi
+
+    # --- Missing CONTENTS: fail open → still promote (regression guard) ---
+    setup_sandbox stage1-unmodified-text auto
+    # Explicit empty pkg_db so host VDB cannot interfere.
+    mkdir -p "$SANDBOX/var/db/pkg-empty"
+    echo "PKG_DB = $SANDBOX/var/db/pkg-empty" >>"$SANDBOX/etc/cfg-update.conf"
+    output="$(run_cfg_update -au 2>&1)" || true
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_output_matches "missing CONTENTS: fail-open validation warning" \
+        'cannot validate marker against Portage CONTENTS' "$output"
+    assert_file_exists "missing CONTENTS: still promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+
+    # --- Multi-package: last install (higher BUILD_TIME) wins ---
+    setup_sandbox stage1-unmodified-text auto
+    live="$SANDBOX/etc/test/test_unmodified_file"
+    pristine_marker="$SANDBOX/etc/test/._cfg0000_test_unmodified_file"
+    marker_md5="$(md5sum "$pristine_marker" | awk '{print $1}')"
+    # Older package has a wrong/stale MD5; newer package has the real marker MD5.
+    install_contents_obj "$live" "00000000000000000000000000000000" \
+        "app-test/old-pkg-1.0" "1000"
+    install_contents_obj "$live" "$marker_md5" \
+        "app-test/new-pkg-2.0" "9000"
+    echo "PKG_DB = $SANDBOX/var/db/pkg" >>"$SANDBOX/etc/cfg-update.conf"
+    run_cfg_update -au >/dev/null
+    backup_root="$SANDBOX/var/lib/cfg-update/backups${SANDBOX}/etc/test"
+    assert_file_exists "last-install CONTENTS: promoted new-cfg ancestor" \
+        "$backup_root/._new-cfg_test_unmodified_file"
+    assert_md5_equals "last-install CONTENTS: ancestor matches newer package MD5" \
+        "$backup_root/._new-cfg_test_unmodified_file" "$marker_md5"
+}
+
 main() {
     parse_args "$@"
 
@@ -1050,6 +1387,7 @@ main() {
     tier_d_execute_manual
     tier_e_index_portage
     tier_f_backups_maintenance
+    tier_g_contents_promote_validation
 
     echo ""
     echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"

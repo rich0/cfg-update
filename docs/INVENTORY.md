@@ -2,7 +2,7 @@
 
 **Updated:** 2026-06-20 (issue #29)  
 **Repo:** [rich0/cfg-update](https://github.com/rich0/cfg-update)  
-**Version:** 1.10.4  
+**Version:** 1.11.0  
 **Target usage:** Single-host Gentoo with Portage (`emerge`); Paludis best-effort
 
 ---
@@ -23,7 +23,7 @@ The repository has **no language-level lockfile** (no `package.json`, `cpanfile`
 | [`cfg-update.conf`](../cfg-update.conf) | 166 | Config template (installed as `/etc/cfg-update.conf`) |
 | [`cfg-update.8`](../cfg-update.8) | 149 | Man page |
 | [`cfg-update_indexing`](../cfg-update_indexing) | 12 | Paludis hook script (copied to `/usr/share/paludis/hooks/...`) |
-| [`gentoo/cfg-update-1.10.4.ebuild`](../gentoo/cfg-update-1.10.4.ebuild) | — | Reference Gentoo ebuild with `src_test()` |
+| [`gentoo/cfg-update-1.11.0.ebuild`](../gentoo/cfg-update-1.11.0.ebuild) | — | Reference Gentoo ebuild with `src_test()` |
 | [`ChangeLog`](../ChangeLog) | — | Gentoo ebuild changelog (historical) |
 | [`COPYING`](../COPYING) | — | GPL v2 |
 | [`test/run-tests.sh`](../test/run-tests.sh) | — | Integration test harness (Tiers 0–F) |
@@ -106,6 +106,7 @@ Every normal invocation (unless `--ebuild`) runs `check_hooks` and `check_tool` 
 | `update_stage1`–`update_stage5` | Per-stage logic |
 | `update_retry`, `update_canceled`, `update_merge_*`, `update_replace_complete`, `update_keep_complete` | Interactive update handlers |
 | `make_temp_backups` | Temp files during merge |
+| `lookup_contents_md5_for_live`, `promote_backup_new` | Validate marker vs Portage CONTENTS before Stage 2 ancestor promote (issue #66) |
 
 ### Index and hooks
 
@@ -219,7 +220,7 @@ See [DEPENDENCIES.md](DEPENDENCIES.md) for install commands. Summary:
 
 | Package | Purpose |
 |---------|---------|
-| `app-portage/cfg-update` | Install via [`gentoo/cfg-update-1.10.4.ebuild`](../gentoo/cfg-update-1.10.4.ebuild) |
+| `app-portage/cfg-update` | Install via [`gentoo/cfg-update-1.11.0.ebuild`](../gentoo/cfg-update-1.11.0.ebuild) |
 | `sys-apps/findutils` | `xargs` for index build |
 | `dev-util/meld` (recommended) | Default merge tool |
 | `dev-perl/Term-ANSIColor`, `dev-perl/TermReadKey` | Perl deps |

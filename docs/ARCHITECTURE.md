@@ -176,9 +176,13 @@ No conflict markers → apply merged result. Conflict → defer to stage 3.
 
 Launches the configured merge tool with ancestor, live, and new files. Requires a tool with 3-way support (meld, kdiff3, xxdiff, tkdiff, imediff).
 
+For Stage 3, the ancestor (`$path_backup_new`) and Portage marker (`$path_new`) are each copied via `make_merge_view_temp` to disposable files under `/tmp` (or `$TMPDIR`) before the tool runs, so accidental saves on non-live panes cannot corrupt permanent backups or markers. The live file and `*.merge` output paths remain real. See issue #65.
+
 ### Stage 4 — Manual 2-way merge (`update_stage4`)
 
 Merges live file and `._cfg*` update when no backup exists. Works with all supported tools.
+
+For Stage 4, the Portage marker (`$path_new`) is copied via `make_merge_view_temp` to a disposable file under `/tmp` (or `$TMPDIR`) before the interactive tool runs (same helper as Stage 3; ancestor view is a no-op when no backup ancestor exists). Accidental saves on the new-file pane cannot corrupt the real `._cfg*` marker. The live file and `*.merge` output paths remain real. See issue #68.
 
 ### Stage 5 — Manual special cases (`update_stage5`)
 
@@ -202,6 +206,15 @@ Backups live under `/var/lib/cfg-update/backups/`, mirroring the original path:
 ```
 
 These enable stage 2's 3-way merges on subsequent updates.
+
+Before writing `._new-cfg_*`, cfg-update compares the staged marker snapshot
+(`$path_temp_new`) to the Portage VDB `CONTENTS` MD5 for the **live path**
+(not the checksum index, and not the `._cfg*` filename). The digest is taken
+from the most recently installed package that owns that path (`BUILD_TIME`,
+else CONTENTS mtime). On match, the ancestor is promoted as usual. On
+mismatch, a warning is printed and the bad content is **not** stored as the
+Stage 2 ancestor (issue #66). If CONTENTS is missing, unparseable, or the
+manager is not Portage, promotion fails open (prior behavior) with a warning.
 
 | Command | Purpose |
 |---------|---------|

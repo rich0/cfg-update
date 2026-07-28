@@ -35,7 +35,7 @@ $Term::ANSIColor::AUTORESET = 1;
 ######################################################################################################################
 
 # Setting program variables...
-    my $version           = "1.10.4";
+    my $version           = "1.11.0";
     my $progname          = basename($0);
     my $debug             = "2>/dev/null";
     my $website           = "https://github.com/rich0/cfg-update";
@@ -955,6 +955,210 @@ sub make_temp_backups{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_temp_backups>\n"; }
 }
 
+# Look up Portage VDB CONTENTS MD5 for the live config path (issue #66).
+# Uses the package with the highest BUILD_TIME (last install); falls back to
+# CONTENTS mtime when BUILD_TIME is missing. Does not read checksum.index.
+# Returns ($status, $md5_or_reason): status is "ok" or "unavailable".
+# All inputs via parameters — no package globals.
+sub lookup_contents_md5_for_live { #ARGS# ($path_live, $pkg_manager, $pkg_db)
+    my ($path_live, $pkg_manager, $pkg_db) = @_;
+    if (!defined $path_live || $path_live eq "") {
+        return ("unavailable", "empty path");
+    }
+    if (!defined $pkg_manager || $pkg_manager !~ /^portage$/i) {
+        return ("unavailable", "not Portage");
+    }
+    if (!defined $pkg_db || $pkg_db eq "" || !-d $pkg_db) {
+        return ("unavailable", "no pkg_db");
+    }
+
+    my $best_md5;
+    my $best_time = -1;
+
+    opendir(my $cat_dh, $pkg_db) or return ("unavailable", "cannot open pkg_db");
+    while (defined(my $category = readdir($cat_dh))) {
+        next if $category eq "." || $category eq "..";
+        my $cat_path = "$pkg_db/$category";
+        next unless -d $cat_path;
+        opendir(my $pkg_dh, $cat_path) or next;
+        while (defined(my $pkg = readdir($pkg_dh))) {
+            next if $pkg eq "." || $pkg eq "..";
+            my $pkg_path = "$cat_path/$pkg";
+            my $contents = "$pkg_path/CONTENTS";
+            next unless -f $contents;
+
+            my $install_time = 0;
+            if (open(my $bt, "<", "$pkg_path/BUILD_TIME")) {
+                my $line = <$bt>;
+                close($bt);
+                if (defined $line && $line =~ /^\s*(\d+)\s*$/) {
+                    $install_time = $1 + 0;
+                }
+            }
+            if ($install_time <= 0) {
+                $install_time = (stat($contents))[9] // 0;
+            }
+
+            open(my $fh, "<", $contents) or next;
+            while (defined(my $line = <$fh>)) {
+                # Portage: obj <path> <md5> <mtime>
+                if ($line =~ /^obj\s+(\S+)\s+([0-9a-fA-F]{32})\b/) {
+                    my ($obj_path, $md5) = ($1, lc($2));
+                    if ($obj_path eq $path_live && $install_time >= $best_time) {
+                        $best_time = $install_time;
+                        $best_md5 = $md5;
+                    }
+                }
+            }
+            close($fh);
+        }
+        closedir($pkg_dh);
+    }
+    closedir($cat_dh);
+
+    if (!defined $best_md5) {
+        return ("unavailable", "no CONTENTS match");
+    }
+    return ("ok", $best_md5);
+}
+
+# Promote staged marker snapshot ($path_temp_new) to permanent Stage 2 ancestor
+# ($path_backup_new) only when it still matches Portage CONTENTS for $path_live
+# (issue #66). On mismatch: warn and skip promote. On missing VDB: fail open.
+# Returns 1 if promoted (or would under pretend), 0 if skipped for mismatch.
+# All inputs via parameters — no package globals. Caller still removes temp_new.
+sub promote_backup_new { #ARGS# ($mode, $path_temp_new, $path_backup_new, $path_live, $pkg_manager, $pkg_db, $enable_backups, $indent)
+    my ($mode, $path_temp_new, $path_backup_new, $path_live,
+        $pkg_manager, $pkg_db, $enable_backups, $indent) = @_;
+    $indent = "" if !defined $indent;
+    $mode = "" if !defined $mode;
+
+    if (!defined $enable_backups || $enable_backups !~ /^yes$|^true$|^on$/i) {
+        return 1;
+    }
+    if (!defined $path_temp_new || $path_temp_new eq "" || !-e $path_temp_new) {
+        return 1;
+    }
+    if (!defined $path_backup_new || $path_backup_new eq "") {
+        return 1;
+    }
+
+    my $marker_md5 = "";
+    {
+        my $out = `md5sum "$path_temp_new" 2>/dev/null`;
+        if (defined $out && $out =~ /^([0-9a-fA-F]{32})\b/) {
+            $marker_md5 = lc($1);
+        }
+    }
+
+    my ($status, $detail) = lookup_contents_md5_for_live($path_live, $pkg_manager, $pkg_db);
+
+    if ($status eq "ok") {
+        my $contents_md5 = $detail;
+        if ($marker_md5 ne "" && $marker_md5 eq $contents_md5) {
+            if ($mode =~ /execute/) {
+                `cp -pP "$path_temp_new" "$path_backup_new" 2>/dev/null`;
+            }
+            return 1;
+        }
+        print BOLD YELLOW "$indent"."* Warning: Portage marker does not match CONTENTS MD5 for $path_live\n";
+        print "$indent"."  marker MD5=$marker_md5 CONTENTS MD5=$contents_md5\n";
+        print BOLD YELLOW "$indent"."* Not promoting tampered marker as Stage 2 ancestor (._new-cfg_*)\n";
+        return 0;
+    }
+
+    # unavailable: fail open (maintain prior promote behavior)
+    print BOLD YELLOW "$indent"."* Warning: cannot validate marker against Portage CONTENTS ($detail); promoting ancestor as usual\n";
+    if ($mode =~ /execute/) {
+        `cp -pP "$path_temp_new" "$path_backup_new" 2>/dev/null`;
+    }
+    return 1;
+}
+
+# Disposable /tmp view of one non-live merge input so accidental tool saves cannot
+# corrupt permanent backups or Portage markers (issue #65; Stage 4: issue #68).
+# Orthogonal to make_temp_backups (which stages permanent backup promotion).
+# $role is a filename tag only (e.g. "ancestor", "new"). Returns view path or "".
+sub make_merge_view_temp { #ARGS# ($src_path, $role, $basename)
+    if ($opt_d >= 1) { print "$tab"."<make_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($src, $role, $basename) = @_;
+    my $view = "";
+    if (!defined $src || $src eq "" || !-e $src) {
+        if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n"; }
+        return $view;
+    }
+    my $tmpdir = $ENV{TMPDIR};
+    if (!defined $tmpdir || $tmpdir eq "") { $tmpdir = "/tmp"; }
+    $tmpdir =~ s|/+$||;
+    if (!-d $tmpdir) {
+        if ($opt_d >= 1) { print "$tab"."  mkdir -p \"$tmpdir\"\n"; }
+        `mkdir -p "$tmpdir" $debug`;
+    }
+    my $safe_role = defined $role ? $role : "view";
+    $safe_role =~ s/[^A-Za-z0-9._-]/_/g;
+    if ($safe_role eq "") { $safe_role = "view"; }
+    my $safe = defined $basename ? $basename : "";
+    $safe =~ s/[^A-Za-z0-9._-]/_/g;
+    if ($safe eq "") { $safe = "file"; }
+    $view = "$tmpdir/cfg-update-$$-$safe_role-$safe";
+    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$src\" \"$view\"\n"; }
+    `cp -pP "$src" "$view" $debug`;
+    if (!-e $view) {
+        if ($opt_d >= 1) { print "$tab"."  failed to create $view; using real path\n"; }
+        $view = "";
+    }
+    if ($opt_d >= 1) {
+        print "$tab"."  path_view = $view\n";
+        $tab =~ s/    //; print "$tab"."</make_merge_view_temp>\n";
+    }
+    return $view;
+}
+
+sub cleanup_merge_view_temp { #ARGS# ($view_path)
+    if ($opt_d >= 1) { print "$tab"."<cleanup_merge_view_temp>\n"; $tab = $tab."    "; }
+    my ($view) = @_;
+    if (defined $view && $view ne "" && -e $view) {
+        if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$view\"\n"; }
+        `rm -f "$view" $debug`;
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</cleanup_merge_view_temp>\n"; }
+}
+
+# Unlink zero or more disposable merge-view paths (convenience wrapper).
+sub cleanup_merge_view_temps {
+    my @views = @_;
+    foreach my $view (@views) {
+        cleanup_merge_view_temp($view);
+    }
+}
+
+# Launch merge tool for Stage 3/4 with disposable /tmp views of non-live inputs.
+# Stage 3: ancestor ($path_backup_new) + marker ($path_new). Stage 4: marker only
+# (ancestor view is a no-op when the backup file does not exist).
+# Temporarily rebinds existing $path_backup_new / $path_new for launch_tool only, then
+# restores them so complete/cancel paths still use the real marker and ancestor.
+sub launch_tool_with_merge_view_temps { #ARGS# ("pretend|execute","mergetool")
+    if ($opt_d >= 1) { print "$tab"."<launch_tool_with_merge_view_temps>\n"; $tab = $tab."    "; }
+    my ($mode, $tool) = @_;
+    my $real_backup_new = $path_backup_new;
+    my $real_new = $path_new;
+    my $view_ancestor = "";
+    my $view_new = "";
+    if ($mode =~ /execute/) {
+        $view_ancestor = make_merge_view_temp($path_backup_new, "ancestor", $cfg_basename);
+        $view_new      = make_merge_view_temp($path_new,        "new",      $cfg_basename);
+        if ($view_ancestor ne "") { $path_backup_new = $view_ancestor; }
+        if ($view_new ne "") { $path_new = $view_new; }
+    }
+    launch_tool($mode, $tool);
+    $path_backup_new = $real_backup_new;
+    $path_new = $real_new;
+    if ($mode =~ /execute/) {
+        cleanup_merge_view_temps($view_ancestor, $view_new);
+    }
+    if ($opt_d >= 1) { $tab =~ s/    //; print "$tab"."</launch_tool_with_merge_view_temps>\n"; }
+}
+
 sub update_stage1{ #ARGS# ("pretend|execute")
     if ($opt_d >= 1) { print "$tab"."<update_stage1>\n"; $tab = $tab."    "; }
     if  ($enable_stage1 !~ /^yes$|^true$|^on$/i) {
@@ -1101,7 +1305,9 @@ sub update_stage3{ #ARGS# ("pretend|execute")
                     if ($key =~ /2/) { &update_keep_complete($_[0]); $key="s"; }
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
-                        &launch_tool($_[0],$merge_tool);
+                        # Stage 3 only: pass /tmp copies of ancestor + marker so accidental
+                        # saves cannot corrupt permanent backups or Portage markers (issue #65).
+                        &launch_tool_with_merge_view_temps($_[0],$merge_tool);
                         if (-e $path_merged) {
                             if ($tool_saves_mergefile_when_aborted =~ "no") {
                                 print "$tab"."  Interactive merging completed... (or aborted)\n";
@@ -1237,7 +1443,7 @@ sub update_stage4{ #ARGS# ("pretend|execute")
                     if ($key =~ /v|y/) {
                         &tool_intro($merge_tool_name);
                         if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; }
-                        &launch_tool($_[0],$merge_tool);
+                        &launch_tool_with_merge_view_temps($_[0],$merge_tool);
                         if ($merge_tool_name =~ /^diff$|^sdiff$/) { print "$tab"."$bar2\n"; print "$tab"."  To scroll up and down use [Shift]+[PgUp] and [Shift]+[PgDn]\n"; }
                         if (-e $path_merged) {
                             if ($tool_saves_mergefile_when_aborted =~ "no") {
@@ -1461,8 +1667,9 @@ sub update_merge_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { if ($is_executable =~ "yes") { print "$tab"."  chmod +x $path_live\n"; }}
@@ -1487,8 +1694,9 @@ sub update_replace_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist!)\n"; }
@@ -1508,8 +1716,9 @@ sub update_keep_complete{ #ARGS# ("pretend|execute")
     if ($_[0] =~ /execute/) { `cp -pP "$path_temp_old" "$path_backup_old" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_old\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_old" $debug`; }
-    if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  cp -pP \"$path_temp_new\" \"$path_backup_new\"\n"; }
-    if ($_[0] =~ /execute/) { `cp -pP "$path_temp_new" "$path_backup_new" $debug`; }
+    # Validate marker vs Portage CONTENTS before writing Stage 2 ancestor (issue #66).
+    promote_backup_new($_[0], $path_temp_new, $path_backup_new, $path_live,
+                       $pkg_manager, $pkg_db, $enable_backups, $tab);
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_temp_new\"\n"; }
     if ($_[0] =~ /execute/) { `rm -f "$path_temp_new" $debug`; }
     if (($opt_v >= 1) || ($opt_d >= 1)) { print "$tab"."  rm -f \"$path_merged\" (should not exist)\n"; }
@@ -1799,6 +2008,8 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."     press [enter] to view all merge/edit options\n";
         print "$tab"."     press [l],[enter] to select the left line(s) from the current file\n";
         print "$tab"."     press [r],[enter] to select the right line(s) from the new file\n";
+        print "$tab"."  The right (new-file) side is a temporary copy; accidental edits there\n";
+        print "$tab"."  are discarded. Save the merge output only.\n";
         print "$tab"."  When $_[0] is done, $progname will ask if you want to complete or cancel\n";
         print "$tab"."  the update...\n";
     } elsif ($_[0] =~ /^diff3$/) {
@@ -1810,10 +2021,14 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."  In $_[0] you select the lines that you want to keep by simply\n";
         print "$tab"."  clicking on the colored lines. They will appear in the merge-pane.\n";
         print "$tab"."  When done, click the M-button to save the result, then exit $_[0]!\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update.\n";
     } elsif ($_[0] =~ /^kdiff3$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, click the save button and exit $_[0]!\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^kompare$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
@@ -1831,15 +2046,26 @@ sub tool_intro{ #ARGS# ("mergetoolname")
         print "$tab"."     press [esc] return to command mode (when in edit mode)\n";
         print "$tab"."     press [:][q][a][!] to close $_[0] without saving\n";
         print "$tab"."     press [:][w][q][a] to save changes and close $_[0]\n";
+        print "$tab"."  The right (new-file) window is a temporary copy; edit the left (live) window only.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^meld$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result over the current configfile by\n";
         print "$tab"."  right-clicking on the left pane and chosing \"Save\"!\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the middle ancestor\n";
+        print "$tab"."  pane is too); accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } elsif ($_[0] =~ /^tkdiff$/) {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
         print "$tab"."  When done, save the merged result with the \"Save & Exit\" button!\n";
+        print "$tab"."  The new-file pane is a temporary copy (in 3-way mode the ancestor pane\n";
+        print "$tab"."  is too); accidental edits there are discarded. Save the merge output only.\n";
+        print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
+    } elsif ($_[0] =~ /^imediff$/) {
+        print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
+        print "$tab"."  When done, the merged result is written to the *.merge output file.\n";
+        print "$tab"."  The new-file input is a temporary copy (in 3-way mode the ancestor input\n";
+        print "$tab"."  is too); accidental edits there are discarded.\n";
         print "$tab"."  When you exit $_[0], $progname will finish the update...\n";
     } else {
         print "$tab"."  In $_[0] you select the lines that you want to keep.\n";
