@@ -6,11 +6,13 @@ EAPI=8
 DESCRIPTION="Easy to use GUI & CLI alternative for etc-update"
 HOMEPAGE="https://github.com/rich0/cfg-update"
 SRC_URI="https://github.com/rich0/cfg-update/archive/${PV}.tar.gz -> ${P}.tgz"
+S="${WORKDIR}/cfg-update-${PV}"
 
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~amd64 ~arm ~arm64 ~ppc ~x86"
 IUSE="test X"
+RESTRICT="!test? ( test )"
 
 BDEPEND="
 	test? (
@@ -26,8 +28,6 @@ RDEPEND="
 		>=x11-misc/sux-1.0
 		x11-apps/xhost
 		)"
-
-S="${WORKDIR}/cfg-update-${PV}"
 
 pkg_prerm() {
 	if [[ -z ${ROOT} ]]
