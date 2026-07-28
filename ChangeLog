@@ -4,15 +4,12 @@
 
 *cfg-update-1.11.0 (2026-07-28)
 
-  Safety: Stage 3 and Stage 4 interactive merge tools receive disposable
-  /tmp views of non-live inputs (ancestor and/or Portage ._cfg* marker)
-  so accidental tool saves cannot corrupt permanent backups or markers
-  (issues #65, #68). Before promoting a staged marker to the Stage 2
-  ancestor (._new-cfg_*), validate its MD5 against Portage VDB CONTENTS
-  for the live path; mismatch skips promote with a warning, missing
-  CONTENTS fails open (issue #66). Docs: optional MentisDB guidance in
-  AGENTS.md (PR #70). Expanded Tier D path/hostile and Tier G CONTENTS
-  promote tests.
+  Safety checks added during all merges to prevent editing of any file versions
+  other than the leftmost one.  This was always intended behavior but lacked
+  safeguards previously.  Hashes are also checked to detect changes made
+  outside of cfg-update.  These will still be preserved but will not be
+  relied upon in future automatic merges.  The next clean package update
+  will return automatic merge behavior for that package.
 
 *cfg-update-1.10.4 (2026-06-20)
 
