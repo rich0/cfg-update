@@ -1,9 +1,3 @@
-# DISCLAIMER / WARNING
-
-I'm in the process of using an LLM to clean up some of the dead code branches here.
-I'm being conservative, but please use care before using the 1.9.0+ releases.  
-Feedback is welcome.
-
 # cfg-update
 
 A safe, staged alternative to Gentoo's `etc-update` for handling configuration file updates after package merges.
