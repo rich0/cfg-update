@@ -11,6 +11,7 @@ LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~amd64 ~arm ~arm64 ~ppc ~x86"
 IUSE="test X"
+RESTRICT="!test? ( test )"
 
 BDEPEND="
 	test? (
@@ -19,15 +20,13 @@ BDEPEND="
 		virtual/perl-Term-ANSIColor
 	)
 "
-
 RDEPEND="
 	dev-perl/TermReadKey
 	X? (
 		>=x11-misc/sux-1.0
 		x11-apps/xhost
-		)"
-
-S="${WORKDIR}/cfg-update-${PV}"
+	)
+"
 
 pkg_prerm() {
 	if [[ -z ${ROOT} ]]
@@ -49,11 +48,6 @@ pkg_postrm() {
 }
 
 src_test() {
-	if ! use test; then
-		ewarn "Skipping tests (USE=-test)"
-		return
-	fi
-
 	einfo "Running cfg-update integration test harness"
 	"${S}"/test/run-tests.sh --full || die "Integration tests failed"
 }
