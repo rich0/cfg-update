@@ -6,6 +6,7 @@ EAPI=8
 DESCRIPTION="Easy to use GUI & CLI alternative for etc-update"
 HOMEPAGE="https://github.com/rich0/cfg-update"
 SRC_URI="https://github.com/rich0/cfg-update/archive/${PV}.tar.gz -> ${P}.tgz"
+S="${WORKDIR}/cfg-update-${PV}"
 
 LICENSE="GPL-2"
 SLOT="0"
@@ -20,6 +21,7 @@ BDEPEND="
 		virtual/perl-Term-ANSIColor
 	)
 "
+
 RDEPEND="
 	dev-perl/TermReadKey
 	X? (
