@@ -20,6 +20,7 @@ BDEPEND="
 		virtual/perl-Term-ANSIColor
 	)
 "
+
 RDEPEND="
 	dev-perl/TermReadKey
 	X? (
